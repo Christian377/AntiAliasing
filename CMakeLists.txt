@@ -41,5 +41,24 @@ file(GLOB_RECURSE AA_FILES_H CONFIGURE_DEPENDS "src/*.h")
 add_executable(aa ${AA_FILES_C} ${AA_FILES_H})
 target_link_libraries(aa PUBLIC cimgui)
 
+set(AA_BIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 # let VS use AA as the starting project 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT aa)
+set_target_properties(aa PROPERTIES
+    VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:aa>"
+)
+
+add_custom_command(TARGET aa POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources"
+    "$<TARGET_FILE_DIR:aa>/resources"
+)
+add_custom_command(TARGET aa POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${AA_BIN_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources"
+        "${AA_BIN_DIR}/resources"
+    COMMAND ${CMAKE_COMMAND} -E copy
+        "$<TARGET_FILE:aa>"
+        "${AA_BIN_DIR}"
+)
