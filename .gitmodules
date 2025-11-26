@@ -1,0 +1,6 @@
+[submodule "3rd_party/glfw"]
+	path = 3rd_party/glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "3rd_party/cimgui"]
+	path = 3rd_party/cimgui
+	url = https://github.com/cimgui/cimgui.git
