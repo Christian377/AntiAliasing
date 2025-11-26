@@ -13,6 +13,11 @@
 #include <cimgui.h>
 #include <cimgui_impl.h>
 
+#include "gl/program.h"
+#include "gl/shaders.h"
+#include "gl/vertex_array.h"
+#include "gl/vertex_buffer.h"
+
 /// @brief Application state, across frames
 typedef struct
 {
@@ -22,6 +27,11 @@ typedef struct
   ImGuiContext* const imgui_context;
   /// @brief The ImGUI IO of `imgui_context` (never null)
   ImGuiIO* const imgui_io;
+
+  /// @brief The window's width
+  int window_width;
+  /// @brief The window's height
+  int window_height;
 
   /// @brief The frame count
   uint64_t frame_count;
@@ -62,8 +72,34 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
   *(ImGuiIO**)(&state.imgui_io)           = io;
 
   ImFontAtlas* atlas = io->Fonts;
-  io->FontDefault = ImFontAtlas_AddFontFromFileTTF(
+  io->FontDefault    = ImFontAtlas_AddFontFromFileTTF(
       atlas, "resources/Inter-4.1/InterVariable.ttf", 18.0f, NULL, NULL);
+  // ^^^ state setup
+
+  float vertices[] = {-0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f, 0.0f, 0.5f, 0.0f};
+
+  aa_vertex_array vao;
+  aa_vertex_buffer vbo;
+  aa_program program;
+  aa_fragment_shader fragment_shader;
+  aa_vertex_shader vertex_shader;
+
+  aa_program_create(&program);
+
+  aa_vertex_shader_create(&vertex_shader, VERTEX_DEFAULT);
+  aa_fragment_shader_create(&fragment_shader, FRAGMENT_DEFAULT);
+
+  aa_vertex_shader_compile(&vertex_shader);
+  aa_fragment_shader_compile(&fragment_shader);
+
+  aa_program_attach_shaders(&program, &vertex_shader, &fragment_shader);
+  aa_program_link(&program);
+
+  aa_vertex_buffer_create(&vbo);
+  aa_vertex_buffer_update(&vbo, vertices, 9 * sizeof(float));
+
+  aa_vertex_array_create(&vao);
+  aa_vertex_array_position_attribute(&vao);
 
   double last_time = glfwGetTime();
   while (!glfwWindowShouldClose(window))
@@ -74,6 +110,16 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
     state.elapsed_time += state.delta_time;
 
     glfwPollEvents();
+    // resize viewport only on changes
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+    if (width != state.window_width || height != state.window_height)
+    {
+      state.window_width  = width;
+      state.window_height = height;
+      glViewport(0, 0, width, height);
+    }
+
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     igNewFrame();
@@ -90,6 +136,11 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
       igRenderPlatformWindowsDefault(NULL, NULL);
       glfwMakeContextCurrent(backup_current_context);
     }
+
+    aa_program_use(&program);
+    aa_vertex_array_bind(&vao);
+    aa_vertex_buffer_bind(&vbo);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 
     glfwSwapBuffers(window);
     ++state.frame_count;
