@@ -13,7 +13,6 @@
 #include <cimgui.h>
 #include <cimgui_impl.h>
 
-
 /// @brief Application state, across frames
 typedef struct
 {
@@ -58,9 +57,13 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
 
   AppState state;
   memset(&state, 0, sizeof(AppState));
-  *(GLFWwindow**)(&state.window) = window;
+  *(GLFWwindow**)(&state.window)          = window;
   *(ImGuiContext**)(&state.imgui_context) = context;
-  *(ImGuiIO**)(&state.imgui_io) = io;
+  *(ImGuiIO**)(&state.imgui_io)           = io;
+
+  ImFontAtlas* atlas = io->Fonts;
+  io->FontDefault = ImFontAtlas_AddFontFromFileTTF(
+      atlas, "resources/Inter-4.1/InterVariable.ttf", 18.0f, NULL, NULL);
 
   double last_time = glfwGetTime();
   while (!glfwWindowShouldClose(window))
@@ -132,10 +135,10 @@ int main()
 
   // start ImGUI
   ImGuiContext* context = igCreateContext(NULL);
-  ImGuiIO* io = igGetIO_ContextPtr(context);
+  ImGuiIO* io           = igGetIO_ContextPtr(context);
   io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
   io->ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-  
+
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init("#version 430 core");
 
