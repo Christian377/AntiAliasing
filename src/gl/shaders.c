@@ -1,15 +1,32 @@
 #include "shaders.h"
+#include <stdio.h>
+#include <stdlib.h>
 
-const char* VERTEX_DEFAULT = "#version 430 core\n"
-                             "layout (location = 0) in vec3 pos;\n"
-                             "void main()\n"
-                             "{\n"
-                             "  gl_Position = vec4(pos.x, pos.y, pos.z, 1.0);\n"
-                             "}\0";
+char* aa_load_file(const char* file_path)
+{
+  if (file_path == NULL)
+    return NULL;
 
-const char* FRAGMENT_DEFAULT = "#version 430 core\n"
-                               "out vec4 FragColor;\n"
-                               "void main()\n"
-                               "{\n"
-                               "  FragColor =  vec4(1.0, 1.0, 1.0, 1.0);"
-                               "}\0";
+  FILE* file = fopen(file_path, "r");
+  if (file == NULL)
+    return NULL;
+
+  fseek(file, 0, SEEK_END);
+  long size = ftell(file);
+  if (size < 0)
+  {
+    fclose(file);
+    return NULL;
+  }
+  fseek(file, 0, SEEK_SET);
+
+  char* ret = malloc(size + 1);
+  if (ret == NULL)
+  {
+    fclose(file);
+    return NULL;
+  }
+  ret[fread(ret, 1, size, file)] = '\0';
+  fclose(file);
+  return ret;
+}

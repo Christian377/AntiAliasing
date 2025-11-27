@@ -40,6 +40,7 @@ file(GLOB_RECURSE AA_FILES_H CONFIGURE_DEPENDS "src/*.h")
 
 add_executable(aa ${AA_FILES_C} ${AA_FILES_H})
 target_link_libraries(aa PUBLIC cimgui)
+target_compile_definitions(aa PUBLIC _CRT_SECURE_NO_WARNINGS)
 
 set(AA_BIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 # let VS use AA as the starting project 

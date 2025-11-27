@@ -18,6 +18,13 @@
 #include "gl/vertex_array.h"
 #include "gl/vertex_buffer.h"
 
+typedef enum
+{
+  AA_NONE,
+  AA_MSAA,
+  AA_FXAA
+}aa_algorithm;
+
 /// @brief Application state, across frames
 typedef struct
 {
@@ -39,6 +46,8 @@ typedef struct
   double delta_time;
   /// @brief The time passed from first frame until present
   double elapsed_time;
+  /// @brief The currently used anti aliasing algorithm
+  aa_algorithm anti_aliasing;
 } AppState;
 
 /// @brief Function called once per frame
@@ -70,6 +79,7 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
   *(GLFWwindow**)(&state.window)          = window;
   *(ImGuiContext**)(&state.imgui_context) = context;
   *(ImGuiIO**)(&state.imgui_io)           = io;
+  state.anti_aliasing                     = AA_NONE;
 
   ImFontAtlas* atlas = io->Fonts;
   io->FontDefault    = ImFontAtlas_AddFontFromFileTTF(
@@ -77,6 +87,16 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
   // ^^^ state setup
 
   float vertices[] = {-0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f, 0.0f, 0.5f, 0.0f};
+
+  char* VERTEX_DEFAULT   = aa_load_file("resources/shaders/vertex_default.glsl");
+  char* FRAGMENT_DEFAULT = aa_load_file("resources/shaders/fragment_default.glsl");
+
+  if (VERTEX_DEFAULT == NULL || FRAGMENT_DEFAULT == NULL)
+  {
+    free(VERTEX_DEFAULT);
+    free(FRAGMENT_DEFAULT);
+    return;
+  }
 
   aa_vertex_array vao;
   aa_vertex_buffer vbo;
@@ -137,14 +157,21 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
       glfwMakeContextCurrent(backup_current_context);
     }
 
-    aa_program_use(&program);
-    aa_vertex_array_bind(&vao);
-    aa_vertex_buffer_bind(&vbo);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    if (state.anti_aliasing == AA_NONE)
+    {
+      aa_program_use(&program);
+      aa_vertex_array_bind(&vao);
+      aa_vertex_buffer_bind(&vbo);
+     
+      glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
 
     glfwSwapBuffers(window);
     ++state.frame_count;
   }
+
+  free(VERTEX_DEFAULT);
+  free(FRAGMENT_DEFAULT);
 }
 
 /// @brief Application starting point
