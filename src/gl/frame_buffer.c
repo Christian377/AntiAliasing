@@ -46,7 +46,7 @@ void aa_texture_msaa_dimensions(
       out->target, samples, GL_RGBA8, width, height, GL_TRUE));
 }
 
-void aa_texture_2D_dimensions(aa_texture* out, size_t width, size_t height)
+void aa_texture_dimensions(aa_texture* out, size_t width, size_t height)
 {
   glCall(glBindTexture(out->target, out->id));
   glCall(glTexImage2D(
