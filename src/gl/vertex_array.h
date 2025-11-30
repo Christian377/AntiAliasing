@@ -13,5 +13,5 @@ void aa_vertex_array_destroy(aa_vertex_array* out);
 void aa_vertex_array_bind(aa_vertex_array* out);
 void aa_vertex_array_position_attribute(aa_vertex_array* out);
 void aa_vertex_array_position_color_attribute(aa_vertex_array* out);
-
+void aa_vertex_array_position_uv_attribute(aa_vertex_array* out);
 #endif // !__HG_AA_GL_VERTEX_BUFFER
