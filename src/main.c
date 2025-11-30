@@ -19,6 +19,9 @@
 #include "gl/vertex_buffer.h"
 #include "gl/frame_buffer.h"
 
+__declspec(dllexport) uint32_t NvOptimusEnablement = 0x00000001;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+
 typedef enum
 {
   AA_NONE,
@@ -68,6 +71,8 @@ static void on_frame(AppState* state)
       state->anti_aliasing = AA_NONE;
     if (igButton("MSAA", (ImVec2){0, 0}))
       state->anti_aliasing = AA_MSAAx8;
+    if (igButton("FXAA", (ImVec2){0, 0}))
+      state->anti_aliasing = AA_FXAA;
     igShowDemoWindow(NULL);
   }
   igEnd();
@@ -75,12 +80,10 @@ static void on_frame(AppState* state)
 
 static void on_init(AppState* state)
 {
-
 }
 
 static void on_end(AppState* state)
 {
-
 }
 
 /// @brief Main loop of the application
@@ -102,7 +105,16 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
   // ^^^ state setup
   on_init(&state);
 
-  float vertices[] = {-0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f, 0.0f, 0.5f, 0.0f};
+  // triangle vertices position
+  static const float vertices[] = {-0.5f, -0.5f, 0.0f, 0.5f, -0.5f,
+                             0.0f,  0.0f,  0.5f, 0.0f};
+  // fullscreenquad positions and uv coordinates, used for fxaa
+  static const float fullscreen_vertices[] = {
+      -1.0f, -1.0f, 0.0f,  0.0f, 0.0f, 1.0f, -1.0f, 0.0f,
+      1.0f,  0.0f,  1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+
+      -1.0f, -1.0f, 0.0f,  0.0f, 0.0f, 1.0f, 1.0f,  0.0f,
+      1.0f,  1.0f,  -1.0f, 1.0f, 0.0f, 0.0f, 1.0f};
 
   char* VERTEX_DEFAULT   = aa_load_file("resources/shaders/vertex_default.glsl");
   char* FRAGMENT_DEFAULT = aa_load_file("resources/shaders/fragment_default.glsl");
@@ -111,16 +123,22 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
   char* FRAGMENT_FXAA = aa_load_file("resources/shaders/fragment_fxaa.glsl");
 
   //TODO:verify for all shaders
-  if (VERTEX_DEFAULT == NULL || FRAGMENT_DEFAULT == NULL)
+  if (VERTEX_DEFAULT == NULL || FRAGMENT_DEFAULT == NULL || VERTEX_FXAA == NULL
+      || FRAGMENT_FXAA == NULL)
   {
     free(VERTEX_DEFAULT);
     free(FRAGMENT_DEFAULT);
+    free(VERTEX_FXAA);
+    free(FRAGMENT_FXAA);
     return;
   }
 
   aa_vertex_array vao;
   aa_vertex_buffer vbo;
+  aa_vertex_array fullscreen_vao;
+  aa_vertex_buffer fullscreen_vbo;
   aa_program program;
+  aa_program fxaa_program;
   aa_fragment_shader default_fragment_shader;
   aa_vertex_shader default_vertex_shader;
   aa_fragment_shader fxaa_fragment_shader;
@@ -128,6 +146,7 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
   aa_frame_buffer default_fbo = {.id = 0};
 
   aa_program_create(&program);
+  aa_program_create(&fxaa_program);
 
   aa_vertex_shader_create(&default_vertex_shader, VERTEX_DEFAULT);
   aa_fragment_shader_create(&default_fragment_shader, FRAGMENT_DEFAULT);
@@ -142,26 +161,45 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
   aa_fragment_shader_compile(&fxaa_fragment_shader);
 
   aa_program_attach_shaders(
+      &fxaa_program, &fxaa_vertex_shader, &fxaa_fragment_shader);
+  aa_program_link(&fxaa_program);
+
+  aa_program_attach_shaders(
       &program, &default_vertex_shader, &default_fragment_shader);
   aa_program_link(&program);
 
+  //triangle vao and vbo setup
   aa_vertex_buffer_create(&vbo);
-  aa_vertex_buffer_update(&vbo, vertices, 9 * sizeof(float));
+  aa_vertex_buffer_update(&vbo, vertices, sizeof(vertices));
 
   aa_vertex_array_create(&vao);
   aa_vertex_array_position_attribute(&vao);
 
-  aa_frame_buffer msaa_fbo;
-  aa_texture msaa_color_texture;
+  //fullscreen quad vao and vbo setup
+  aa_vertex_buffer_create(&fullscreen_vbo);
+  aa_vertex_buffer_update(&fullscreen_vbo, fullscreen_vertices, sizeof(fullscreen_vertices));
+  aa_vertex_array_create(&fullscreen_vao);
+  aa_vertex_array_position_uv_attribute(&fullscreen_vao);
+
 
   glfwGetFramebufferSize(window, &state.window_width, &state.window_height);
 
+  //MSAA multisampling fbo and texture initialization
+  aa_frame_buffer msaa_fbo;
+  aa_texture msaa_color_texture;
   aa_frame_buffer_create(&msaa_fbo);
   aa_texture_msaa_create(&msaa_color_texture);
   aa_texture_msaa_dimensions(
       &msaa_color_texture, state.window_width, state.window_height, 8);
   aa_frame_buffer_color_texture(&msaa_fbo, &msaa_color_texture);
   aa_frame_buffer_bind(&default_fbo);
+
+  //FXAA fbo and screen texture initialization
+  aa_frame_buffer fxaa_fbo;
+  aa_texture fxaa_color_texture;
+  aa_frame_buffer_create(&fxaa_fbo);
+  aa_texture_create(&fxaa_color_texture, state.window_width, state.window_height);
+  aa_frame_buffer_color_texture(&fxaa_fbo, &fxaa_color_texture);
 
   double last_time = glfwGetTime();
   while (!glfwWindowShouldClose(window))
@@ -183,6 +221,8 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
 
       aa_texture_msaa_dimensions(&msaa_color_texture, width, height, 8);
       aa_frame_buffer_color_texture(&msaa_fbo, &msaa_color_texture);
+      aa_texture_dimensions(&fxaa_color_texture, width, height);
+      aa_frame_buffer_color_texture(&fxaa_fbo, &fxaa_color_texture);
       aa_frame_buffer_bind(&default_fbo);
     }
     aa_frame_buffer_bind(&default_fbo);
@@ -218,6 +258,33 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
       aa_frame_buffer_bind(&default_fbo);
     }
 
+    if (state.anti_aliasing == AA_FXAA)
+    {
+      // Bind FXAA framebuffer
+      aa_frame_buffer_bind(&fxaa_fbo);
+      glClear(GL_COLOR_BUFFER_BIT);
+      aa_program_use(&program);
+      aa_vertex_array_bind(&vao);
+      aa_vertex_buffer_bind(&vbo);
+      glDrawArrays(GL_TRIANGLES, 0, 3);
+
+      aa_frame_buffer_bind(&default_fbo);
+      glClear(GL_COLOR_BUFFER_BIT);
+      aa_program_use(&fxaa_program);
+      aa_vertex_array_bind(&fullscreen_vao);
+      aa_vertex_buffer_bind(&fullscreen_vbo);
+
+      //dont need to rebind vbo(careful quand meme)
+      glCall(glActiveTexture(GL_TEXTURE0));
+      aa_texture_bind(&fxaa_color_texture);
+
+      glUniform1i(glGetUniformLocation(fxaa_program.id, "screenTexture"), 0);
+      glUniform2f(
+          glGetUniformLocation(fxaa_program.id, "resolution"),
+          state.window_width, state.window_height);
+
+      glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
 
     // END FRAME:
     igRender();
@@ -229,7 +296,7 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
       igUpdatePlatformWindows();
       igRenderPlatformWindowsDefault(NULL, NULL);
       glfwMakeContextCurrent(backup_current_context);
-    }    
+    }
     glfwSwapBuffers(window);
     ++state.frame_count;
   }
