@@ -34,6 +34,7 @@ void aa_fragment_shader_compile(aa_fragment_shader* out)
   {
     glCall(glGetShaderInfoLog(out->id, 512, NULL, infoLog));
     printf("ERROR: VERTEX SHADER COMPILATION FAILED\n%s", infoLog);
+    exit(-1);
   }
 }
 
@@ -47,6 +48,7 @@ void aa_vertex_shader_compile(aa_vertex_shader* out)
   {
     glCall(glGetShaderInfoLog(out->id, 512, NULL, infoLog));
     printf("ERROR: FRAGMENT SHADER COMPILATION FAILED\n%s", infoLog);
+    exit(-1);
   }
 }
 
@@ -75,6 +77,7 @@ void aa_program_link(aa_program* out)
   {
     glCall(glGetProgramInfoLog(out->id, 512, NULL, infoLog));
     printf("ERROR: PROGRAM LINKING FAILED\n%s", infoLog);
+    exit(-1);
   }
   glValidateProgram(out->id);
 }
