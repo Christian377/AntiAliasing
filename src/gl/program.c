@@ -33,7 +33,7 @@ void aa_fragment_shader_compile(aa_fragment_shader* out)
   if (!success)
   {
     glCall(glGetShaderInfoLog(out->id, 512, NULL, infoLog));
-    printf("ERROR: VERTEX SHADER COMPILATION FAILED\n%s", infoLog);
+    printf("ERROR: FRAGMENT SHADER COMPILATION FAILED\n%s", infoLog);
     exit(-1);
   }
 }
