@@ -17,6 +17,22 @@ void aa_texture_msaa_create(
   out->target = GL_TEXTURE_2D_MULTISAMPLE;
   glCall(glGenTextures(1, &out->id));
 }
+void aa_texture_from_data(
+    aa_texture* out, const unsigned char* data, size_t width, size_t height)
+{
+  out->target = GL_TEXTURE_2D;
+  glGenTextures(1, &out->id);
+  glBindTexture(out->target, out->id);
+
+  // Upload the texture data
+  glTexImage2D(
+      GL_TEXTURE_2D, 0, GL_RGBA8, (GLsizei)width, (GLsizei)height, 0, GL_RGBA,
+      GL_UNSIGNED_BYTE, data);
+
+  // Set default filtering and wrapping
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+}
 //void aa_texture_msaa_create(
 //    aa_texture* out, size_t width, size_t height, uint8_t samples)
 //{

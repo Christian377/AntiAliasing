@@ -14,6 +14,8 @@ typedef struct
 void aa_texture_create(aa_texture* out, size_t width, size_t height);
 void aa_texture_msaa_create(
     aa_texture* out);
+void aa_texture_from_data(
+    aa_texture* out, const unsigned char* data, size_t width, size_t height);
 void aa_texture_bind(aa_texture* out);
 void aa_texture_delete(aa_texture* out);
 void aa_texture_dimensions(aa_texture* out, size_t width, size_t height);
