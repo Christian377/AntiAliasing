@@ -8,8 +8,7 @@
 typedef struct
 {
   unsigned int id;
-  uint64_t result;
-
+  uint32_t result;
 }aa_time_query;
 
 void aa_time_query_create(aa_time_query* out);
