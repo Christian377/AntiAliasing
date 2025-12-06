@@ -369,6 +369,7 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
 
     if (state.anti_aliasing == AA_SMAA)
     {
+      aa_time_query_begin(&query);
       aa_frame_buffer_bind(&smaa_fbo);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       aa_program_use(&program); 
@@ -413,6 +414,7 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
       glUniform1i(glGetUniformLocation(smaa_neighborhood_program.id, "sceneTex"), 0);
       glUniform1i(glGetUniformLocation(smaa_neighborhood_program.id, "blendTex"), 1);
       glDrawArrays(GL_TRIANGLES, 0, 6);
+      aa_time_query_end(&query);
     }
 
     aa_time_query_result(&query);
