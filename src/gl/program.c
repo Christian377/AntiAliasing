@@ -94,3 +94,8 @@ void aa_program_use(aa_program* out)
 {
   glCall(glUseProgram(out->id));
 }
+
+void aa_program_delete(aa_program* out)
+{
+  glCall(glDeleteProgram(out->id));
+}

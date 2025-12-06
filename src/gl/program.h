@@ -35,5 +35,6 @@ void aa_program_attach_shaders(
     aa_program* out, aa_vertex_shader* vertex_shader,
     aa_fragment_shader* fragment_shader);
 void aa_program_use(aa_program* out);
+void aa_program_delete(aa_program* out);
 
 #endif // !__HG_AA_GL_PROGRAM
