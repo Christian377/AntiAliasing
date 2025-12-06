@@ -58,31 +58,47 @@ typedef struct
   double elapsed_time;
   /// @brief The currently used anti aliasing algorithm
   aa_algorithm anti_aliasing;
+  /// @brief The time query responsible for measuring algorithms performance
   aa_time_query query;
+  /// @brief The vertex array object for position only vertices
   aa_vertex_array vao;
+  /// @brief The position only vertex buffer object
   aa_vertex_buffer vbo;
+  /// @brief The veryex array object for position and uv attributes vertices
   aa_vertex_array fullscreen_vao;
+  /// @brief The position and uv attributes vertex buffer object
   aa_vertex_buffer fullscreen_vbo;
+  /// @brief Program used to draw the scene without any specific additional effect
   aa_program program;
+  /// @brief Program used to apply FXAA 
   aa_program fxaa_program;
+  /// @brief Program used in SMAA edge detection pass
   aa_program smaa_edge_program;
+  /// @brief Program used in SMAA blend weight calculation pass
   aa_program smaa_blend_program;
+  /// @brief Program used in SMAA neighborhood blending pass
   aa_program smaa_neighborhood_program;
+  /// @brief Vertex shader which takes as input position only vertices
   aa_fragment_shader default_fragment_shader;
+  /// @brief Fragment shader which simply draws vertex shader outputs without any additional effect
   aa_vertex_shader default_vertex_shader;
+  /// @brief Fragment shader containing FXAA post processing algorithm
   aa_fragment_shader fxaa_fragment_shader;
+  /// @brief Vertex shader used to render a texture on the screen
   aa_vertex_shader fullscreen_quad_vertex_shader;
+  // SMAA fragment shaders
   aa_fragment_shader smaa_edge_fragment_shader;
   aa_fragment_shader smaa_blend_fragment_shader;
   aa_fragment_shader smaa_neighborhood_fragment_shader;
+  // Default fbo, with id 0
   aa_frame_buffer default_fbo;
-  //MSAA multisampling fbo and texture
+  // MSAA multisampling fbo and texture
   aa_frame_buffer msaa_fbo;
   aa_texture msaa_color_texture;
-  //FXAA fbo and screen texture
+  // FXAA fbo and screen texture
   aa_frame_buffer fxaa_fbo;
   aa_texture fxaa_color_texture;
-  //FXAA fbo and required textures initialization
+  // FXAA fbo and required textures
   aa_frame_buffer smaa_fbo;
   aa_frame_buffer smaa_edge_fbo;
   aa_frame_buffer smaa_blend_fbo;
@@ -390,6 +406,46 @@ static int on_init(AppState* state)
 
 static void on_end(AppState* state)
 {
+  // Delete Programs
+  aa_program_delete(&state->program);
+  aa_program_delete(&state->fxaa_program);
+  aa_program_delete(&state->smaa_edge_program);
+  aa_program_delete(&state->smaa_blend_program);
+  aa_program_delete(&state->smaa_neighborhood_program);
+
+  // Delete Shaders 
+  aa_vertex_shader_delete(&state->default_vertex_shader);
+  aa_fragment_shader_delete(&state->default_fragment_shader);
+  aa_vertex_shader_delete(&state->fullscreen_quad_vertex_shader);
+  aa_fragment_shader_delete(&state->fxaa_fragment_shader);
+  aa_fragment_shader_delete(&state->smaa_edge_fragment_shader);
+  aa_fragment_shader_delete(&state->smaa_blend_fragment_shader);
+  aa_fragment_shader_delete(&state->smaa_neighborhood_fragment_shader);
+
+  // 3. Delete Buffers and vaos
+  aa_vertex_buffer_delete(&state->vbo);
+  aa_vertex_array_delete(&state->vao);
+  aa_vertex_buffer_delete(&state->fullscreen_vbo);
+  aa_vertex_array_delete(&state->fullscreen_vao);
+
+  // Delete Framebuffers
+  aa_frame_buffer_delete(&state->msaa_fbo);
+  aa_frame_buffer_delete(&state->fxaa_fbo);
+  aa_frame_buffer_delete(&state->smaa_fbo);
+  aa_frame_buffer_delete(&state->smaa_edge_fbo);
+  aa_frame_buffer_delete(&state->smaa_blend_fbo);
+
+  // Delete Textures
+  aa_texture_delete(&state->msaa_color_texture);
+  aa_texture_delete(&state->fxaa_color_texture);
+  aa_texture_delete(&state->smaa_color_texture);
+  aa_texture_delete(&state->smaa_area_texture);
+  aa_texture_delete(&state->smaa_search_texture);
+  aa_texture_delete(&state->smaa_edge_texture);
+  aa_texture_delete(&state->smaa_blend_texture);
+
+  // Delete Query
+  aa_time_query_delete(&state->query);
 }
 
 static void on_resize(AppState* state)
