@@ -9,7 +9,7 @@ typedef struct
 } aa_vertex_array;
 
 void aa_vertex_array_create(aa_vertex_array* out);
-void aa_vertex_array_destroy(aa_vertex_array* out);
+void aa_vertex_array_delete(aa_vertex_array* out);
 void aa_vertex_array_bind(aa_vertex_array* out);
 void aa_vertex_array_position_attribute(aa_vertex_array* out);
 void aa_vertex_array_position_color_attribute(aa_vertex_array* out);

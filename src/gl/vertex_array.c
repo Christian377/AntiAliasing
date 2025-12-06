@@ -7,7 +7,7 @@ void aa_vertex_array_create(aa_vertex_array* out)
   glCall(glGenVertexArrays(1, &out->id));
 }
 
-void aa_vertex_array_destroy(aa_vertex_array* out)
+void aa_vertex_array_delete(aa_vertex_array* out)
 {
   glCall(glDeleteBuffers(1, &out->id));
 }
