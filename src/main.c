@@ -23,15 +23,16 @@
 #include "gl/query.h"
 #include "smaa/AreaTex.h"
 #include "smaa/SearchTex.h"
+#include "smaa_helper.h"
 
 #ifdef _WIN32
 // on windows define the following symbols so that the high performance
 // GPU is used (not the integrated one).
 __declspec(dllexport) uint32_t NvOptimusEnablement             = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3native.h>
-#include <windows.h>
+  #define GLFW_EXPOSE_NATIVE_WIN32
+  #include <GLFW/glfw3native.h>
+  #include <windows.h>
 #endif
 
 /// @brief The number of samples to try to capture
@@ -44,7 +45,11 @@ typedef enum
   AA_MSAAx8,
   AA_MSAAx16,
   AA_FXAA,
-  AA_SMAA
+  AA_FXAA_ITERATIVE,
+  AA_SMAA_LOW,
+  AA_SMAA_MEDIUM,
+  AA_SMAA_HIGH,
+  AA_SMAA_ULTRA
 } aa_algorithm;
 
 /// @brief Application state, across frames
@@ -84,28 +89,29 @@ typedef struct
   aa_program program;
   /// @brief Program used to apply FXAA
   aa_program fxaa_program;
-  /// @brief Program used in SMAA edge detection pass
-  aa_program smaa_edge_program;
-  /// @brief Program used in SMAA blend weight calculation pass
-  aa_program smaa_blend_program;
-  /// @brief Program used in SMAA neighborhood blending pass
-  aa_program smaa_neighborhood_program;
+  /// @brief Program used to apply FXAA
+  aa_program fxaa_iterative_program;
   /// @brief Vertex shader which takes as input position only vertices
   aa_fragment_shader default_fragment_shader;
   /// @brief Fragment shader which simply draws vertex shader outputs without any additional effect
   aa_vertex_shader default_vertex_shader;
   /// @brief Fragment shader containing FXAA post processing algorithm
   aa_fragment_shader fxaa_fragment_shader;
+  /// @brief Fragment shader containing FXAA post processing algorithm
+  aa_fragment_shader fxaa_iterative_fragment_shader;
   /// @brief Vertex shader used to render a texture on the screen
   aa_vertex_shader fullscreen_quad_vertex_shader;
-  // SMAA fragment shaders
-  aa_fragment_shader smaa_edge_fragment_shader;
-  aa_fragment_shader smaa_blend_fragment_shader;
-  aa_fragment_shader smaa_neighborhood_fragment_shader;
+  // SMAA Pipelines (Programs + Shaders bundled)
+  aa_smaa_pipeline smaa_low;
+  aa_smaa_pipeline smaa_medium;
+  aa_smaa_pipeline smaa_high;
+  aa_smaa_pipeline smaa_ultra;
   // Default fbo, with id 0
   aa_frame_buffer default_fbo;
   // MSAA multisampling fbo and textures
-  aa_frame_buffer msaa_fbo;
+  aa_frame_buffer msaa_fbo_x4;
+  aa_frame_buffer msaa_fbo_x8;
+  aa_frame_buffer msaa_fbo_x16;
   aa_texture msaa_color_texture_x4;
   aa_texture msaa_color_texture_x8;
   aa_texture msaa_color_texture_x16;
@@ -140,22 +146,43 @@ static void on_frame(AppState* state)
       fabsf(sinf((float)state->elapsed_time * 0.8f)), 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+  // Setting up the control window
   if (igBegin("Control", NULL, 0))
   {
+    // Algorithm selection menu
     igTextColored((ImVec4){1.0f, 0.9f, 0.0f, 1.0f}, "Anti-Aliasing Algorithm:");
     if (igButton("No AA", (ImVec2){0, 0}))
       state->anti_aliasing = AA_NONE;
     igSameLine(0.0f, 5.0f);
-    if (igButton("MSAA", (ImVec2){0, 0}))
+    if (igButton("MSAA_x4", (ImVec2){0, 0}))
+      state->anti_aliasing = AA_MSAAx4;
+    igSameLine(0.0f, 5.0f);
+    if (igButton("MSAA_x8", (ImVec2){0, 0}))
       state->anti_aliasing = AA_MSAAx8;
+    igSameLine(0.0f, 5.0f);
+    if (igButton("MSAA_x16", (ImVec2){0, 0}))
+      state->anti_aliasing = AA_MSAAx16;
     igSameLine(0.0f, 5.0f);
     if (igButton("FXAA", (ImVec2){0, 0}))
       state->anti_aliasing = AA_FXAA;
     igSameLine(0.0f, 5.0f);
-    if (igButton("SMAA", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_SMAA;
+    if (igButton("FXAA_iter", (ImVec2){0, 0}))
+      state->anti_aliasing = AA_FXAA_ITERATIVE;
+    igSameLine(0.0f, 5.0f);
+    if (igButton("SMAA_LOW", (ImVec2){0, 0}))
+      state->anti_aliasing = AA_SMAA_LOW;
+    igSameLine(0.0f, 5.0f);
+    if (igButton("SMAA_MEDIUM", (ImVec2){0, 0}))
+      state->anti_aliasing = AA_SMAA_MEDIUM;
+    igSameLine(0.0f, 5.0f);
+    if (igButton("SMAA_HIGH", (ImVec2){0, 0}))
+      state->anti_aliasing = AA_SMAA_HIGH;
+    igSameLine(0.0f, 5.0f);
+    if (igButton("SMAA_ULTRA", (ImVec2){0, 0}))
+      state->anti_aliasing = AA_SMAA_ULTRA;
 
     igSeparator();
+    // Tracing menu
     igTextColored((ImVec4){1.0f, 0.9f, 0.0f, 1.0f}, "Tracing:");
 
     igBeginDisabled(state->is_recording);
@@ -183,7 +210,8 @@ static void on_frame(AppState* state)
       FILE* file = fopen(state->current_algorithm_file_name, "w");
       if (file == NULL)
       {
-        printf("Error: Could not create file `%s`!",
+        printf(
+            "Error: Could not create file `%s`!",
             state->current_algorithm_file_name);
       }
       else
@@ -210,11 +238,31 @@ static void on_frame(AppState* state)
     state->current_algorithm_file_name = "aa_NONE.txt";
   }
 
+  if (state->anti_aliasing == AA_MSAAx4)
+  {
+    aa_time_query_begin(&state->query);
+    aa_frame_buffer_bind(&state->msaa_fbo_x4);
+
+    glClear(GL_COLOR_BUFFER_BIT);
+    aa_program_use(&state->program);
+    aa_vertex_array_bind(&state->vao);
+    aa_vertex_buffer_bind(&state->vbo);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    aa_frame_buffer_blit(
+        &state->default_fbo, &state->msaa_fbo_x4, state->window_width,
+        state->window_height);
+    aa_frame_buffer_bind(&state->default_fbo);
+    aa_time_query_end(&state->query);
+
+    state->current_algorithm_file_name = "aa_MSAAx4.txt";
+  }
+
   if (state->anti_aliasing == AA_MSAAx8)
   {
     aa_time_query_begin(&state->query);
     // Bind MSAA framebuffer
-    aa_frame_buffer_bind(&state->msaa_fbo);
+    aa_frame_buffer_bind(&state->msaa_fbo_x8);
     glClear(GL_COLOR_BUFFER_BIT);
     aa_program_use(&state->program);
     aa_vertex_array_bind(&state->vao);
@@ -223,12 +271,32 @@ static void on_frame(AppState* state)
 
     // Blit MSAA FBO to default framebuffer
     aa_frame_buffer_blit(
-        &state->default_fbo, &state->msaa_fbo, state->window_width,
+        &state->default_fbo, &state->msaa_fbo_x8, state->window_width,
         state->window_height);
     aa_frame_buffer_bind(&state->default_fbo);
     aa_time_query_end(&state->query);
 
     state->current_algorithm_file_name = "aa_MSAAx8.txt";
+  }
+
+  if (state->anti_aliasing == AA_MSAAx16)
+  {
+    aa_time_query_begin(&state->query);
+    aa_frame_buffer_bind(&state->msaa_fbo_x16);
+
+    glClear(GL_COLOR_BUFFER_BIT);
+    aa_program_use(&state->program);
+    aa_vertex_array_bind(&state->vao);
+    aa_vertex_buffer_bind(&state->vbo);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    aa_frame_buffer_blit(
+        &state->default_fbo, &state->msaa_fbo_x16, state->window_width,
+        state->window_height);
+    aa_frame_buffer_bind(&state->default_fbo);
+    aa_time_query_end(&state->query);
+
+    state->current_algorithm_file_name = "aa_MSAAx16.txt";
   }
 
   if (state->anti_aliasing == AA_FXAA)
@@ -246,9 +314,8 @@ static void on_frame(AppState* state)
     glClear(GL_COLOR_BUFFER_BIT);
     aa_program_use(&state->fxaa_program);
     aa_vertex_array_bind(&state->fullscreen_vao);
-    //aa_vertex_buffer_bind(&fullscreen_vbo);
 
-    //dont need to rebind vbo(careful quand meme)
+    //don't need to rebind vbo
     glCall(glActiveTexture(GL_TEXTURE0));
     aa_texture_bind(&state->fxaa_color_texture);
 
@@ -263,57 +330,153 @@ static void on_frame(AppState* state)
     state->current_algorithm_file_name = "aa_FXAA.txt";
   }
 
-  if (state->anti_aliasing == AA_SMAA)
+  if (state->anti_aliasing == AA_FXAA_ITERATIVE)
   {
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glViewport(0, 0, state->window_width, state->window_height);
+
     aa_time_query_begin(&state->query);
-    aa_frame_buffer_bind(&state->smaa_fbo);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    aa_frame_buffer_bind(&state->fxaa_fbo);
+    glClear(GL_COLOR_BUFFER_BIT);
     aa_program_use(&state->program);
     aa_vertex_array_bind(&state->vao);
     aa_vertex_buffer_bind(&state->vbo);
     glDrawArrays(GL_TRIANGLES, 0, 3);
 
-    // Edge detection
-    aa_frame_buffer_bind(&state->smaa_edge_fbo);
-    aa_program_use(&state->smaa_edge_program);
-    aa_vertex_array_bind(&state->fullscreen_vao);
-    // bind color texture as input
-    glActiveTexture(GL_TEXTURE0);
-    aa_texture_bind(&state->smaa_color_texture);
-    glUniform1i(glGetUniformLocation(state->smaa_edge_program.id, "sceneTex"), 0);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    aa_frame_buffer_bind(&state->default_fbo);
+    aa_program_use(&state->fxaa_iterative_program);
 
-    // Blend weight calculation pass
-    aa_frame_buffer_bind(&state->smaa_blend_fbo); // bind to blend weight texture
-    aa_program_use(&state->smaa_blend_program);
     aa_vertex_array_bind(&state->fullscreen_vao);
     glActiveTexture(GL_TEXTURE0);
-    aa_texture_bind(&state->smaa_edge_texture);
-    glActiveTexture(GL_TEXTURE1);
-    aa_texture_bind(&state->smaa_area_texture);
-    glActiveTexture(GL_TEXTURE2);
-    aa_texture_bind(&state->smaa_search_texture);
-    glUniform1i(glGetUniformLocation(state->smaa_blend_program.id, "edgeTex"), 0);
-    glUniform1i(glGetUniformLocation(state->smaa_blend_program.id, "areaTex"), 1);
-    glUniform1i(glGetUniformLocation(state->smaa_blend_program.id, "searchTex"), 2);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    aa_texture_bind(&state->fxaa_color_texture);
 
-    // Neighborhood blending pass
-    aa_frame_buffer_bind(&state->default_fbo); // render final result to screen
-    aa_program_use(&state->smaa_neighborhood_program);
-    aa_vertex_array_bind(&state->fullscreen_vao);
-    glActiveTexture(GL_TEXTURE0);
-    aa_texture_bind(&state->smaa_color_texture);
-    glActiveTexture(GL_TEXTURE1);
-    aa_texture_bind(&state->smaa_blend_texture);
     glUniform1i(
-        glGetUniformLocation(state->smaa_neighborhood_program.id, "sceneTex"), 0);
-    glUniform1i(
-        glGetUniformLocation(state->smaa_neighborhood_program.id, "blendTex"), 1);
+        glGetUniformLocation(state->fxaa_iterative_program.id, "screenTexture"), 0);
+    glUniform2f(
+        glGetUniformLocation(state->fxaa_iterative_program.id, "resolution"),
+        state->window_width, state->window_height);
+
     glDrawArrays(GL_TRIANGLES, 0, 6);
     aa_time_query_end(&state->query);
-    
-    state->current_algorithm_file_name = "aa_SMAA.txt";
+
+    state->current_algorithm_file_name = "aa_FXAA_Iterative.txt";
+  }
+
+  // Check if current mode is ANY of the SMAA modes
+  if (state->anti_aliasing >= AA_SMAA_LOW && state->anti_aliasing <= AA_SMAA_ULTRA)
+  {
+    aa_smaa_pipeline* smaa_pipeline = NULL;
+
+    // Select the correct pipeline struct and log filename
+    switch (state->anti_aliasing)
+    {
+    case AA_SMAA_LOW:
+      smaa_pipeline                      = &state->smaa_low;
+      state->current_algorithm_file_name = "aa_SMAA_Low.txt";
+      break;
+    case AA_SMAA_MEDIUM:
+      smaa_pipeline                      = &state->smaa_medium;
+      state->current_algorithm_file_name = "aa_SMAA_Medium.txt";
+      break;
+    case AA_SMAA_HIGH:
+      smaa_pipeline                      = &state->smaa_high;
+      state->current_algorithm_file_name = "aa_SMAA_High.txt";
+      break;
+    case AA_SMAA_ULTRA:
+      smaa_pipeline                      = &state->smaa_ultra;
+      state->current_algorithm_file_name = "aa_SMAA_Ultra.txt";
+      break;
+    default:
+      break;
+    }
+
+    if (smaa_pipeline)
+    {
+      glDisable(GL_SCISSOR_TEST);
+      glDisable(GL_STENCIL_TEST);
+      glDisable(GL_DEPTH_TEST);
+      glDisable(GL_CULL_FACE);
+      glDisable(GL_BLEND);
+      glViewport(0, 0, state->window_width, state->window_height);
+
+      aa_time_query_begin(&state->query);
+
+      // Initial Render (Scene to FBO)
+      aa_frame_buffer_bind(&state->smaa_fbo);
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      aa_program_use(&state->program);
+      aa_vertex_array_bind(&state->vao);
+      aa_vertex_buffer_bind(&state->vbo);
+      glDrawArrays(GL_TRIANGLES, 0, 3);
+
+      glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+      // Metrics required by SMAA.hlsl
+      float w          = (float)state->window_width;
+      float h          = (float)state->window_height;
+      float metrics[4] = {1.0f / w, 1.0f / h, w, h};
+
+      // Edge Detection Pass
+      aa_frame_buffer_bind(&state->smaa_edge_fbo);
+      glClear(GL_COLOR_BUFFER_BIT); 
+      aa_program_use(&smaa_pipeline->edge_program);
+      aa_vertex_array_bind(&state->fullscreen_vao);
+      glActiveTexture(GL_TEXTURE0);
+      aa_texture_bind(&state->smaa_color_texture);
+      glUniform4fv(
+          glGetUniformLocation(smaa_pipeline->edge_program.id, "SMAA_RT_METRICS"), 1,
+          metrics);
+      glUniform1i(
+          glGetUniformLocation(smaa_pipeline->edge_program.id, "sceneTex"), 0);
+      glDrawArrays(GL_TRIANGLES, 0, 6);
+
+      // Blend Weight Pass
+      aa_frame_buffer_bind(&state->smaa_blend_fbo);
+      glClear(GL_COLOR_BUFFER_BIT);
+      aa_program_use(&smaa_pipeline->blend_program);
+      glActiveTexture(GL_TEXTURE0);
+      aa_texture_bind(&state->smaa_edge_texture);
+      glActiveTexture(GL_TEXTURE1);
+      aa_texture_bind(&state->smaa_area_texture);
+      glActiveTexture(GL_TEXTURE2);
+      aa_texture_bind(&state->smaa_search_texture);
+      glUniform4fv(
+          glGetUniformLocation(smaa_pipeline->blend_program.id, "SMAA_RT_METRICS"), 1,
+          metrics);
+      glUniform1i(
+          glGetUniformLocation(smaa_pipeline->blend_program.id, "edgeTex"), 0);
+      glUniform1i(
+          glGetUniformLocation(smaa_pipeline->blend_program.id, "areaTex"), 1);
+      glUniform1i(
+          glGetUniformLocation(smaa_pipeline->blend_program.id, "searchTex"), 2);
+      glDrawArrays(GL_TRIANGLES, 0, 6);
+
+      // Neighborhood Blending Pass (To Screen)
+      aa_frame_buffer_bind(&state->default_fbo);
+      aa_program_use(&smaa_pipeline->neighborhood_program);
+      aa_vertex_array_bind(&state->fullscreen_vao);
+      glActiveTexture(GL_TEXTURE0);
+      aa_texture_bind(&state->smaa_color_texture);
+      glActiveTexture(GL_TEXTURE1);
+      aa_texture_bind(&state->smaa_blend_texture);
+      glUniform4fv(
+          glGetUniformLocation(smaa_pipeline->neighborhood_program.id, "SMAA_RT_METRICS"), 1,
+          metrics);
+      glUniform1i(
+          glGetUniformLocation(smaa_pipeline->neighborhood_program.id, "sceneTex"),
+          0);
+      glUniform1i(
+          glGetUniformLocation(smaa_pipeline->neighborhood_program.id, "blendTex"),
+          1);
+      glDrawArrays(GL_TRIANGLES, 0, 6);
+
+      aa_time_query_end(&state->query);
+    }
   }
 
   aa_time_query_result(&state->query);
@@ -339,18 +502,61 @@ static int on_init(AppState* state)
       -1.0f, -1.0f, 0.0f,  0.0f, 0.0f, 1.0f, 1.0f,  0.0f,
       1.0f,  1.0f,  -1.0f, 1.0f, 0.0f, 0.0f, 1.0f};
 
+  // Basic shaders
   char* VERTEX_DEFAULT   = aa_load_file("resources/shaders/vertex_default.glsl");
   char* FRAGMENT_DEFAULT = aa_load_file("resources/shaders/fragment_default.glsl");
 
   char* VERTEX_FULLSCREEN_QUAD =
       aa_load_file("resources/shaders/vertex_fullscreen_quad.glsl");
   char* FRAGMENT_FXAA = aa_load_file("resources/shaders/fragment_fxaa.glsl");
-  char* FRAGMENT_EDGE_SMAA =
+  char* FRAGMENT_FXAA_ITER =
+      aa_load_file("resources/shaders/fragment_fxaa_iterative.glsl");
+
+  // SMAA shaders common part across settings
+  char* VERTEX_EDGE_SMAA_BODY =
+      aa_load_file("resources/shaders/vertex_edge_smaa.glsl");
+  char* VERTEX_BLEND_SMAA_BODY =
+      aa_load_file("resources/shaders/vertex_blend_smaa.glsl");
+  char* VERTEX_NEIGHBORHOOD_SMAA_BODY =
+      aa_load_file("resources/shaders/vertex_neighborhood_smaa.glsl");
+  char* FRAGMENT_EDGE_SMAA_BODY =
       aa_load_file("resources/shaders/fragment_edge_smaa.glsl");
-  char* FRAGMENT_BLEND_SMAA =
+  char* FRAGMENT_BLEND_SMAA_BODY =
       aa_load_file("resources/shaders/fragment_blend_smaa.glsl");
-  char* FRAGMENT_NEIGHBORHOOD_SMAA =
+  char* FRAGMENT_NEIGHBORHOOD_SMAA_BODY =
       aa_load_file("resources/shaders/fragment_neighborhood_smaa.glsl");
+
+  // Assembling SMAA shaders
+  char* SMAA_LIB = aa_load_file("resources/shaders/SMAA.hlsl");
+  if (!SMAA_LIB)
+  {
+    printf("Error loading SMAA.hlsl\n");
+    return -1;
+  }
+  // LOW
+  aa_smaa_pipeline_init(
+      &state->smaa_low, "#define SMAA_PRESET_LOW 1\n", SMAA_LIB,
+      VERTEX_EDGE_SMAA_BODY, FRAGMENT_EDGE_SMAA_BODY, VERTEX_BLEND_SMAA_BODY,
+      FRAGMENT_BLEND_SMAA_BODY, VERTEX_NEIGHBORHOOD_SMAA_BODY,
+      FRAGMENT_NEIGHBORHOOD_SMAA_BODY);
+  // MEDIUM
+  aa_smaa_pipeline_init(
+      &state->smaa_medium, "#define SMAA_PRESET_MEDIUM 1\n", SMAA_LIB,
+      VERTEX_EDGE_SMAA_BODY, FRAGMENT_EDGE_SMAA_BODY, VERTEX_BLEND_SMAA_BODY,
+      FRAGMENT_BLEND_SMAA_BODY, VERTEX_NEIGHBORHOOD_SMAA_BODY,
+      FRAGMENT_NEIGHBORHOOD_SMAA_BODY);
+  // HIGH
+  aa_smaa_pipeline_init(
+      &state->smaa_high, "#define SMAA_PRESET_HIGH 1\n", SMAA_LIB,
+      VERTEX_EDGE_SMAA_BODY, FRAGMENT_EDGE_SMAA_BODY, VERTEX_BLEND_SMAA_BODY,
+      FRAGMENT_BLEND_SMAA_BODY, VERTEX_NEIGHBORHOOD_SMAA_BODY,
+      FRAGMENT_NEIGHBORHOOD_SMAA_BODY);
+  // ULTRA
+  aa_smaa_pipeline_init(
+      &state->smaa_ultra, "#define SMAA_PRESET_ULTRA 1\n", SMAA_LIB,
+      VERTEX_EDGE_SMAA_BODY, FRAGMENT_EDGE_SMAA_BODY, VERTEX_BLEND_SMAA_BODY,
+      FRAGMENT_BLEND_SMAA_BODY, VERTEX_NEIGHBORHOOD_SMAA_BODY,
+      FRAGMENT_NEIGHBORHOOD_SMAA_BODY);
 
   state->samples_total   = AA_SAMPLE_COUNT;
   state->samples_current = 0;
@@ -362,18 +568,30 @@ static int on_init(AppState* state)
   memset(state->samples, 0, samples_bytes);
   state->current_algorithm_file_name = "aa_NONE.txt";
 
+  // Check if any file failed to load
   if (VERTEX_DEFAULT == NULL || FRAGMENT_DEFAULT == NULL
       || VERTEX_FULLSCREEN_QUAD == NULL || FRAGMENT_FXAA == NULL
-      || FRAGMENT_EDGE_SMAA == NULL || FRAGMENT_BLEND_SMAA == NULL
-      || FRAGMENT_NEIGHBORHOOD_SMAA == NULL)
+      || FRAGMENT_FXAA_ITER == NULL || SMAA_LIB == NULL
+      || VERTEX_EDGE_SMAA_BODY == NULL || VERTEX_BLEND_SMAA_BODY == NULL
+      || VERTEX_NEIGHBORHOOD_SMAA_BODY == NULL || FRAGMENT_EDGE_SMAA_BODY == NULL
+      || FRAGMENT_BLEND_SMAA_BODY == NULL || FRAGMENT_NEIGHBORHOOD_SMAA_BODY == NULL)
   {
     free(VERTEX_DEFAULT);
     free(FRAGMENT_DEFAULT);
     free(VERTEX_FULLSCREEN_QUAD);
     free(FRAGMENT_FXAA);
-    free(FRAGMENT_EDGE_SMAA);
-    free(FRAGMENT_BLEND_SMAA);
-    free(FRAGMENT_NEIGHBORHOOD_SMAA);
+    free(FRAGMENT_FXAA_ITER);
+
+    free(SMAA_LIB);
+
+    free(VERTEX_EDGE_SMAA_BODY);
+    free(VERTEX_BLEND_SMAA_BODY);
+    free(VERTEX_NEIGHBORHOOD_SMAA_BODY);
+    free(FRAGMENT_EDGE_SMAA_BODY);
+    free(FRAGMENT_BLEND_SMAA_BODY);
+    free(FRAGMENT_NEIGHBORHOOD_SMAA_BODY);
+
+    printf("Error: One or more shader files failed to load.\n");
     return -1;
   }
 
@@ -382,9 +600,7 @@ static int on_init(AppState* state)
   // create programs
   aa_program_create(&state->program);
   aa_program_create(&state->fxaa_program);
-  aa_program_create(&state->smaa_edge_program);
-  aa_program_create(&state->smaa_blend_program);
-  aa_program_create(&state->smaa_neighborhood_program);
+  aa_program_create(&state->fxaa_iterative_program);
 
   // create shaders
   aa_vertex_shader_create(&state->default_vertex_shader, VERTEX_DEFAULT);
@@ -393,11 +609,8 @@ static int on_init(AppState* state)
   aa_vertex_shader_create(
       &state->fullscreen_quad_vertex_shader, VERTEX_FULLSCREEN_QUAD);
   aa_fragment_shader_create(&state->fxaa_fragment_shader, FRAGMENT_FXAA);
-
-  aa_fragment_shader_create(&state->smaa_edge_fragment_shader, FRAGMENT_EDGE_SMAA);
-  aa_fragment_shader_create(&state->smaa_blend_fragment_shader, FRAGMENT_BLEND_SMAA);
   aa_fragment_shader_create(
-      &state->smaa_neighborhood_fragment_shader, FRAGMENT_NEIGHBORHOOD_SMAA);
+      &state->fxaa_iterative_fragment_shader, FRAGMENT_FXAA_ITER);
 
   // compile shaders
   aa_vertex_shader_compile(&state->default_vertex_shader);
@@ -405,29 +618,18 @@ static int on_init(AppState* state)
 
   aa_vertex_shader_compile(&state->fullscreen_quad_vertex_shader);
   aa_fragment_shader_compile(&state->fxaa_fragment_shader);
+  aa_fragment_shader_compile(&state->fxaa_iterative_fragment_shader);
 
-  aa_fragment_shader_compile(&state->smaa_edge_fragment_shader);
-  aa_fragment_shader_compile(&state->smaa_blend_fragment_shader);
-  aa_fragment_shader_compile(&state->smaa_neighborhood_fragment_shader);
-
-  // attach shaders andlink programs
+  // attach shaders and link programs
   aa_program_attach_shaders(
       &state->fxaa_program, &state->fullscreen_quad_vertex_shader,
       &state->fxaa_fragment_shader);
   aa_program_link(&state->fxaa_program);
 
   aa_program_attach_shaders(
-      &state->smaa_edge_program, &state->fullscreen_quad_vertex_shader,
-      &state->smaa_edge_fragment_shader);
-  aa_program_link(&state->smaa_edge_program);
-  aa_program_attach_shaders(
-      &state->smaa_blend_program, &state->fullscreen_quad_vertex_shader,
-      &state->smaa_blend_fragment_shader);
-  aa_program_link(&state->smaa_blend_program);
-  aa_program_attach_shaders(
-      &state->smaa_neighborhood_program, &state->fullscreen_quad_vertex_shader,
-      &state->smaa_neighborhood_fragment_shader);
-  aa_program_link(&state->smaa_neighborhood_program);
+      &state->fxaa_iterative_program, &state->fullscreen_quad_vertex_shader,
+      &state->fxaa_iterative_fragment_shader);
+  aa_program_link(&state->fxaa_iterative_program);
 
   aa_program_attach_shaders(
       &state->program, &state->default_vertex_shader,
@@ -451,11 +653,25 @@ static int on_init(AppState* state)
   glfwGetFramebufferSize(state->window, &state->window_width, &state->window_height);
 
   // MSAA multisampling fbo and texture initialization
-  aa_frame_buffer_create(&state->msaa_fbo);
+  aa_frame_buffer_create(&state->msaa_fbo_x4);
+  aa_frame_buffer_create(&state->msaa_fbo_x8);
+  aa_frame_buffer_create(&state->msaa_fbo_x16);
+
+  aa_texture_msaa_create(&state->msaa_color_texture_x4);
+  aa_texture_msaa_dimensions(
+      &state->msaa_color_texture_x4, state->window_width, state->window_height, 4);
+
   aa_texture_msaa_create(&state->msaa_color_texture_x8);
   aa_texture_msaa_dimensions(
       &state->msaa_color_texture_x8, state->window_width, state->window_height, 8);
-  aa_frame_buffer_color_texture(&state->msaa_fbo, &state->msaa_color_texture_x8);
+
+  aa_texture_msaa_create(&state->msaa_color_texture_x16);
+  aa_texture_msaa_dimensions(
+      &state->msaa_color_texture_x16, state->window_width, state->window_height, 16);
+  aa_frame_buffer_color_texture(&state->msaa_fbo_x4, &state->msaa_color_texture_x4);
+  aa_frame_buffer_color_texture(&state->msaa_fbo_x8, &state->msaa_color_texture_x8);
+  aa_frame_buffer_color_texture(
+      &state->msaa_fbo_x16, &state->msaa_color_texture_x16);
   aa_frame_buffer_bind(&state->default_fbo);
 
   //FXAA fbo and screen texture initialization
@@ -468,8 +684,8 @@ static int on_init(AppState* state)
   aa_frame_buffer_create(&state->smaa_fbo);
   aa_frame_buffer_create(&state->smaa_edge_fbo);
   aa_frame_buffer_create(&state->smaa_blend_fbo);
-  aa_texture_from_data(&state->smaa_area_texture, areaTexBytes, 160, 560);
-  aa_texture_from_data(&state->smaa_search_texture, searchTexBytes, 60, 33);
+  aa_smaa_area_texture(&state->smaa_area_texture, areaTexBytes, 160, 560);
+  aa_smaa_search_texture(&state->smaa_search_texture, searchTexBytes, 60, 33);
   aa_texture_create(
       &state->smaa_color_texture, state->window_width, state->window_height);
   aa_texture_create(
@@ -485,9 +701,7 @@ static int on_init(AppState* state)
   free(FRAGMENT_DEFAULT);
   free(VERTEX_FULLSCREEN_QUAD);
   free(FRAGMENT_FXAA);
-  free(FRAGMENT_EDGE_SMAA);
-  free(FRAGMENT_BLEND_SMAA);
-  free(FRAGMENT_NEIGHBORHOOD_SMAA);
+  free(FRAGMENT_FXAA_ITER);
 
   return 0;
 }
@@ -497,18 +711,14 @@ static void on_end(AppState* state)
   // Delete Programs
   aa_program_delete(&state->program);
   aa_program_delete(&state->fxaa_program);
-  aa_program_delete(&state->smaa_edge_program);
-  aa_program_delete(&state->smaa_blend_program);
-  aa_program_delete(&state->smaa_neighborhood_program);
+  aa_program_delete(&state->fxaa_iterative_program);
 
   // Delete Shaders
   aa_vertex_shader_delete(&state->default_vertex_shader);
   aa_fragment_shader_delete(&state->default_fragment_shader);
   aa_vertex_shader_delete(&state->fullscreen_quad_vertex_shader);
   aa_fragment_shader_delete(&state->fxaa_fragment_shader);
-  aa_fragment_shader_delete(&state->smaa_edge_fragment_shader);
-  aa_fragment_shader_delete(&state->smaa_blend_fragment_shader);
-  aa_fragment_shader_delete(&state->smaa_neighborhood_fragment_shader);
+  aa_fragment_shader_delete(&state->fxaa_iterative_fragment_shader);
 
   // Delete Buffers and vaos
   aa_vertex_buffer_delete(&state->vbo);
@@ -517,20 +727,30 @@ static void on_end(AppState* state)
   aa_vertex_array_delete(&state->fullscreen_vao);
 
   // Delete Framebuffers
-  aa_frame_buffer_delete(&state->msaa_fbo);
+  aa_frame_buffer_delete(&state->msaa_fbo_x4);
+  aa_frame_buffer_delete(&state->msaa_fbo_x8);
+  aa_frame_buffer_delete(&state->msaa_fbo_x16);
   aa_frame_buffer_delete(&state->fxaa_fbo);
   aa_frame_buffer_delete(&state->smaa_fbo);
   aa_frame_buffer_delete(&state->smaa_edge_fbo);
   aa_frame_buffer_delete(&state->smaa_blend_fbo);
 
   // Delete Textures
+  aa_texture_delete(&state->msaa_color_texture_x4);
   aa_texture_delete(&state->msaa_color_texture_x8);
+  aa_texture_delete(&state->msaa_color_texture_x16);
   aa_texture_delete(&state->fxaa_color_texture);
   aa_texture_delete(&state->smaa_color_texture);
   aa_texture_delete(&state->smaa_area_texture);
   aa_texture_delete(&state->smaa_search_texture);
   aa_texture_delete(&state->smaa_edge_texture);
   aa_texture_delete(&state->smaa_blend_texture);
+
+  // Delete SMAA Pipelines
+  aa_smaa_pipeline_delete(&state->smaa_low);
+  aa_smaa_pipeline_delete(&state->smaa_medium);
+  aa_smaa_pipeline_delete(&state->smaa_high);
+  aa_smaa_pipeline_delete(&state->smaa_ultra);
 
   // Delete Query
   aa_time_query_delete(&state->query);
@@ -540,8 +760,15 @@ static void on_end(AppState* state)
 static void on_resize(AppState* state)
 {
   aa_texture_msaa_dimensions(
+      &state->msaa_color_texture_x4, state->window_width, state->window_height, 4);
+  aa_texture_msaa_dimensions(
       &state->msaa_color_texture_x8, state->window_width, state->window_height, 8);
-  aa_frame_buffer_color_texture(&state->msaa_fbo, &state->msaa_color_texture_x8);
+  aa_texture_msaa_dimensions(
+      &state->msaa_color_texture_x16, state->window_width, state->window_height, 16);
+  aa_frame_buffer_color_texture(&state->msaa_fbo_x4, &state->msaa_color_texture_x4);
+  aa_frame_buffer_color_texture(&state->msaa_fbo_x8, &state->msaa_color_texture_x8);
+  aa_frame_buffer_color_texture(
+      &state->msaa_fbo_x16, &state->msaa_color_texture_x16);
   aa_texture_dimensions(
       &state->fxaa_color_texture, state->window_width, state->window_height);
   aa_texture_dimensions(
