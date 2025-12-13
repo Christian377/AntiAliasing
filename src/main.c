@@ -24,13 +24,25 @@
 #include "smaa/AreaTex.h"
 #include "smaa/SearchTex.h"
 
+#ifdef _WIN32
+// on windows define the following symbols so that the high performance
+// GPU is used (not the integrated one).
 __declspec(dllexport) uint32_t NvOptimusEnablement             = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#include <windows.h>
+#endif
+
+/// @brief The number of samples to try to capture
+uint32_t AA_SAMPLE_COUNT = 100;
 
 typedef enum
 {
   AA_NONE,
+  AA_MSAAx4,
   AA_MSAAx8,
+  AA_MSAAx16,
   AA_FXAA,
   AA_SMAA
 } aa_algorithm;
@@ -70,7 +82,7 @@ typedef struct
   aa_vertex_buffer fullscreen_vbo;
   /// @brief Program used to draw the scene without any specific additional effect
   aa_program program;
-  /// @brief Program used to apply FXAA 
+  /// @brief Program used to apply FXAA
   aa_program fxaa_program;
   /// @brief Program used in SMAA edge detection pass
   aa_program smaa_edge_program;
@@ -92,9 +104,11 @@ typedef struct
   aa_fragment_shader smaa_neighborhood_fragment_shader;
   // Default fbo, with id 0
   aa_frame_buffer default_fbo;
-  // MSAA multisampling fbo and texture
+  // MSAA multisampling fbo and textures
   aa_frame_buffer msaa_fbo;
-  aa_texture msaa_color_texture;
+  aa_texture msaa_color_texture_x4;
+  aa_texture msaa_color_texture_x8;
+  aa_texture msaa_color_texture_x16;
   // FXAA fbo and screen texture
   aa_frame_buffer fxaa_fbo;
   aa_texture fxaa_color_texture;
@@ -107,6 +121,13 @@ typedef struct
   aa_texture smaa_search_texture;
   aa_texture smaa_edge_texture;
   aa_texture smaa_blend_texture;
+  // File in which we write the time values
+  const char* current_algorithm_file_name;
+  // samples buffer
+  bool is_recording;
+  uint64_t samples_total;
+  uint64_t samples_current;
+  uint32_t* samples;
 } AppState;
 
 /// @brief Function called once per frame
@@ -119,17 +140,61 @@ static void on_frame(AppState* state)
       fabsf(sinf((float)state->elapsed_time * 0.8f)), 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  if (igBegin("Hello World", NULL, 0))
+  if (igBegin("Control", NULL, 0))
   {
-    igText("Hello World from SIE!");
+    igTextColored((ImVec4){1.0f, 0.9f, 0.0f, 1.0f}, "Anti-Aliasing Algorithm:");
     if (igButton("No AA", (ImVec2){0, 0}))
       state->anti_aliasing = AA_NONE;
+    igSameLine(0.0f, 5.0f);
     if (igButton("MSAA", (ImVec2){0, 0}))
       state->anti_aliasing = AA_MSAAx8;
+    igSameLine(0.0f, 5.0f);
     if (igButton("FXAA", (ImVec2){0, 0}))
       state->anti_aliasing = AA_FXAA;
+    igSameLine(0.0f, 5.0f);
     if (igButton("SMAA", (ImVec2){0, 0}))
       state->anti_aliasing = AA_SMAA;
+
+    igSeparator();
+    igTextColored((ImVec4){1.0f, 0.9f, 0.0f, 1.0f}, "Tracing:");
+
+    igBeginDisabled(state->is_recording);
+    if (igInputInt("Number of Samples", &AA_SAMPLE_COUNT, 10, 100, 0))
+    {
+      if (AA_SAMPLE_COUNT > 10000)
+        AA_SAMPLE_COUNT = 10000;
+      if (AA_SAMPLE_COUNT < 10)
+        AA_SAMPLE_COUNT = 10;
+      state->samples_total = AA_SAMPLE_COUNT;
+      state->samples = realloc(state->samples, AA_SAMPLE_COUNT * sizeof(uint32_t));
+      state->samples_current = 0;
+    }
+    igEndDisabled();
+
+    if (igButton("Record Samples", (ImVec2){0, 0}))
+    {
+      state->samples_current = 0;
+      state->is_recording    = true;
+    }
+    igSameLine(0.0f, 5.0f);
+    igBeginDisabled(state->samples_current != state->samples_total);
+    if (igButton("Save Samples", (ImVec2){0, 0}))
+    {
+      FILE* file = fopen(state->current_algorithm_file_name, "w");
+      if (file == NULL)
+      {
+        printf("Error: Could not create file `%s`!",
+            state->current_algorithm_file_name);
+      }
+      else
+      {
+        for (size_t i = 0; i < state->samples_current; i++)
+          fprintf(file, "%" PRIu32 ",", state->samples[i]);
+        fclose(file);
+      }
+      state->samples_current = 0;
+    }
+    igEndDisabled();
   }
   igEnd();
 
@@ -142,6 +207,7 @@ static void on_frame(AppState* state)
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
     aa_time_query_end(&state->query);
+    state->current_algorithm_file_name = "aa_NONE.txt";
   }
 
   if (state->anti_aliasing == AA_MSAAx8)
@@ -161,6 +227,8 @@ static void on_frame(AppState* state)
         state->window_height);
     aa_frame_buffer_bind(&state->default_fbo);
     aa_time_query_end(&state->query);
+
+    state->current_algorithm_file_name = "aa_MSAAx8.txt";
   }
 
   if (state->anti_aliasing == AA_FXAA)
@@ -191,6 +259,8 @@ static void on_frame(AppState* state)
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
     aa_time_query_end(&state->query);
+
+    state->current_algorithm_file_name = "aa_FXAA.txt";
   }
 
   if (state->anti_aliasing == AA_SMAA)
@@ -242,10 +312,18 @@ static void on_frame(AppState* state)
         glGetUniformLocation(state->smaa_neighborhood_program.id, "blendTex"), 1);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     aa_time_query_end(&state->query);
+    
+    state->current_algorithm_file_name = "aa_SMAA.txt";
   }
 
   aa_time_query_result(&state->query);
-  printf("%" PRIu32 "\n", state->query.result);
+  // write in buffer
+  if (state->samples_current < state->samples_total && state->is_recording)
+  {
+    state->samples[state->samples_current++] = state->query.result;
+    if (state->samples_current == state->samples_total)
+      state->is_recording = false;
+  }
 }
 
 static int on_init(AppState* state)
@@ -273,6 +351,16 @@ static int on_init(AppState* state)
       aa_load_file("resources/shaders/fragment_blend_smaa.glsl");
   char* FRAGMENT_NEIGHBORHOOD_SMAA =
       aa_load_file("resources/shaders/fragment_neighborhood_smaa.glsl");
+
+  state->samples_total   = AA_SAMPLE_COUNT;
+  state->samples_current = 0;
+  size_t samples_bytes   = sizeof(uint32_t) * state->samples_total;
+  state->samples         = malloc(samples_bytes);
+  state->is_recording    = false;
+  if (state->samples == NULL)
+    return -1;
+  memset(state->samples, 0, samples_bytes);
+  state->current_algorithm_file_name = "aa_NONE.txt";
 
   if (VERTEX_DEFAULT == NULL || FRAGMENT_DEFAULT == NULL
       || VERTEX_FULLSCREEN_QUAD == NULL || FRAGMENT_FXAA == NULL
@@ -346,14 +434,14 @@ static int on_init(AppState* state)
       &state->default_fragment_shader);
   aa_program_link(&state->program);
 
-  //triangle vao and vbo setup
+  // triangle vao and vbo setup
   aa_vertex_buffer_create(&state->vbo);
   aa_vertex_buffer_update(&state->vbo, vertices, sizeof(vertices));
 
   aa_vertex_array_create(&state->vao);
   aa_vertex_array_position_attribute(&state->vao);
 
-  //fullscreen quad vao and vbo setup
+  // fullscreen quad vao and vbo setup
   aa_vertex_buffer_create(&state->fullscreen_vbo);
   aa_vertex_buffer_update(
       &state->fullscreen_vbo, fullscreen_vertices, sizeof(fullscreen_vertices));
@@ -362,12 +450,12 @@ static int on_init(AppState* state)
 
   glfwGetFramebufferSize(state->window, &state->window_width, &state->window_height);
 
-  //MSAA multisampling fbo and texture initialization
+  // MSAA multisampling fbo and texture initialization
   aa_frame_buffer_create(&state->msaa_fbo);
-  aa_texture_msaa_create(&state->msaa_color_texture);
+  aa_texture_msaa_create(&state->msaa_color_texture_x8);
   aa_texture_msaa_dimensions(
-      &state->msaa_color_texture, state->window_width, state->window_height, 8);
-  aa_frame_buffer_color_texture(&state->msaa_fbo, &state->msaa_color_texture);
+      &state->msaa_color_texture_x8, state->window_width, state->window_height, 8);
+  aa_frame_buffer_color_texture(&state->msaa_fbo, &state->msaa_color_texture_x8);
   aa_frame_buffer_bind(&state->default_fbo);
 
   //FXAA fbo and screen texture initialization
@@ -376,7 +464,7 @@ static int on_init(AppState* state)
       &state->fxaa_color_texture, state->window_width, state->window_height);
   aa_frame_buffer_color_texture(&state->fxaa_fbo, &state->fxaa_color_texture);
 
-  //FXAA fbo and required textures initialization
+  // FXAA fbo and required textures initialization
   aa_frame_buffer_create(&state->smaa_fbo);
   aa_frame_buffer_create(&state->smaa_edge_fbo);
   aa_frame_buffer_create(&state->smaa_blend_fbo);
@@ -413,7 +501,7 @@ static void on_end(AppState* state)
   aa_program_delete(&state->smaa_blend_program);
   aa_program_delete(&state->smaa_neighborhood_program);
 
-  // Delete Shaders 
+  // Delete Shaders
   aa_vertex_shader_delete(&state->default_vertex_shader);
   aa_fragment_shader_delete(&state->default_fragment_shader);
   aa_vertex_shader_delete(&state->fullscreen_quad_vertex_shader);
@@ -422,7 +510,7 @@ static void on_end(AppState* state)
   aa_fragment_shader_delete(&state->smaa_blend_fragment_shader);
   aa_fragment_shader_delete(&state->smaa_neighborhood_fragment_shader);
 
-  // 3. Delete Buffers and vaos
+  // Delete Buffers and vaos
   aa_vertex_buffer_delete(&state->vbo);
   aa_vertex_array_delete(&state->vao);
   aa_vertex_buffer_delete(&state->fullscreen_vbo);
@@ -436,7 +524,7 @@ static void on_end(AppState* state)
   aa_frame_buffer_delete(&state->smaa_blend_fbo);
 
   // Delete Textures
-  aa_texture_delete(&state->msaa_color_texture);
+  aa_texture_delete(&state->msaa_color_texture_x8);
   aa_texture_delete(&state->fxaa_color_texture);
   aa_texture_delete(&state->smaa_color_texture);
   aa_texture_delete(&state->smaa_area_texture);
@@ -446,13 +534,14 @@ static void on_end(AppState* state)
 
   // Delete Query
   aa_time_query_delete(&state->query);
+  free(state->samples);
 }
 
 static void on_resize(AppState* state)
 {
   aa_texture_msaa_dimensions(
-      &state->msaa_color_texture, state->window_width, state->window_height, 8);
-  aa_frame_buffer_color_texture(&state->msaa_fbo, &state->msaa_color_texture);
+      &state->msaa_color_texture_x8, state->window_width, state->window_height, 8);
+  aa_frame_buffer_color_texture(&state->msaa_fbo, &state->msaa_color_texture_x8);
   aa_texture_dimensions(
       &state->fxaa_color_texture, state->window_width, state->window_height);
   aa_texture_dimensions(
@@ -480,9 +569,9 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
   *(ImGuiContext**)(&state.imgui_context) = context;
   *(ImGuiIO**)(&state.imgui_io)           = io;
   state.anti_aliasing                     = AA_NONE;
-  state.default_fbo.id                    = 0;  
-  ImFontAtlas* atlas = io->Fonts;
-  io->FontDefault    = ImFontAtlas_AddFontFromFileTTF(
+  state.default_fbo.id                    = 0;
+  ImFontAtlas* atlas                      = io->Fonts;
+  io->FontDefault                         = ImFontAtlas_AddFontFromFileTTF(
       atlas, "resources/Inter-4.1/InterVariable.ttf", 18.0f, NULL, NULL);
   // ^^^ state setup
   if (on_init(&state) != 0)
@@ -560,6 +649,17 @@ int main()
     exit(-1);
   }
   glfwMakeContextCurrent(window);
+// Disabling window minimize, which could interfere with the sampling process
+#ifdef _WIN32
+  // Get the raw Windows handle
+  HWND hwnd = glfwGetWin32Window(window);
+  // Get current style
+  LONG style = GetWindowLong(hwnd, GWL_STYLE);
+  // Remove the Minimize Box from the style
+  style &= ~WS_MINIMIZEBOX;
+  // Apply the new style
+  SetWindowLong(hwnd, GWL_STYLE, style);
+#endif
 
   // initialize glad
   if (gladLoadGLLoader((GLADloadproc)&glfwGetProcAddress) == 0)
