@@ -11,20 +11,36 @@ uniform vec2 resolution; // window width and height in pixels
 #define FXAA_REDUCE_MUL   (1.0/8.0)
 #define FXAA_SPAN_MAX     8.0
 
+// NEW: Add the Threshold setting (same as iterative)
+#define FXAA_EDGE_THRESHOLD 0.125
+#define FXAA_EDGE_THRESHOLD_MIN 0.0625
+
 void main()
 {
     vec2 texel = 1.0 / resolution;
+    //Center pixel
+    vec3 rgbM = texture(screenTexture, frag_uv).rgb;
 
     // Sample the luminance of neighboring pixels
     float lumaTL = dot(texture(screenTexture, frag_uv + vec2(-texel.x, -texel.y)).rgb, vec3(0.299, 0.587, 0.114));
     float lumaTR = dot(texture(screenTexture, frag_uv + vec2(texel.x, -texel.y)).rgb, vec3(0.299, 0.587, 0.114));
     float lumaBL = dot(texture(screenTexture, frag_uv + vec2(-texel.x, texel.y)).rgb, vec3(0.299, 0.587, 0.114));
     float lumaBR = dot(texture(screenTexture, frag_uv + vec2(texel.x, texel.y)).rgb, vec3(0.299, 0.587, 0.114));
-    float lumaM  = dot(texture(screenTexture, frag_uv).rgb, vec3(0.299, 0.587, 0.114));
+    float lumaM  = dot(rgbM, vec3(0.299, 0.587, 0.114));
 
     // Compute local contrast
     float lumaMin = min(lumaM, min(min(lumaTL, lumaTR), min(lumaBL, lumaBR)));
     float lumaMax = max(lumaM, max(max(lumaTL, lumaTR), max(lumaBL, lumaBR)));
+
+    // Calculate range of contrast
+    float range = lumaMax - lumaMin;
+    
+    // If contrast is lower than threshold, it's not an edge.
+    // Return original color and skip all math below.
+    if(range < max(FXAA_EDGE_THRESHOLD_MIN, lumaMax * FXAA_EDGE_THRESHOLD)) {
+        FragColor = vec4(rgbM, 1.0);
+        return;
+    }
 
     vec2 dir;
     dir.x = -((lumaTL + lumaTR) - (lumaBL + lumaBR));
