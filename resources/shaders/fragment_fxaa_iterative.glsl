@@ -7,10 +7,10 @@ uniform sampler2D screenTexture;
 uniform vec2 resolution;
 
 // Tunables (defaults chosen to match common FXAA 3.11 "quality" usage)
-uniform float fxaaQualitySubpix        = 0.75;    // 0.00..1.00
+uniform float fxaaQualitySubpix        = 0.75;    
 uniform float fxaaQualityEdgeThreshold = 0.166;   // 0.063..0.333 (lower = more edges, slower)
-uniform float fxaaQualityEdgeThresholdMin = 0.0833; // 0.0312..0.0833
-uniform float lumaScale = 1.0; // keep 1.0 unless you know you need otherwise
+uniform float fxaaQualityEdgeThresholdMin = 0.0833; 
+uniform float lumaScale = 1.0; 
 
 vec4 FxaaTexOff(sampler2D t, vec2 p, vec2 o, vec2 r) { return textureLod(t, p + (o * r), 0.0); }
 float FxaaLuma(vec4 rgba) { return lumaScale * dot(rgba.rgb, vec3(0.299, 0.587, 0.114)); }
@@ -25,7 +25,7 @@ vec4 FxaaPixelShader(
     float qEdgeThreshold,
     float qEdgeThresholdMin
 ) {
-    // "high 39" preset search steps (renamed to avoid reserved '__' identifiers)
+    // "high 39" preset search steps 
     float fxaaQualityP0  = 1.0;
     float fxaaQualityP1  = 1.0;
     float fxaaQualityP2  = 1.0;
