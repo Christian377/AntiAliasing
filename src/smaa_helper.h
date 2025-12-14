@@ -1,5 +1,5 @@
-#ifndef __AA_SMAA_SMAA_HELPER
-#define __AA_SMAA_SMAA_HELPER
+#ifndef __HG_AA_SMAA_SMAA_HELPER
+#define __HG_AA_SMAA_SMAA_HELPER
 
 #include <stdlib.h>
 #include <string.h>
