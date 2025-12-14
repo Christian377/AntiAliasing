@@ -2,7 +2,7 @@
 #define __HG_AA_GL_VERTEX_ARRAY
 
 #include <glad/glad.h>
-
+// Wrappers for OpenGl vertex arrays
 typedef struct
 {
   unsigned int id;

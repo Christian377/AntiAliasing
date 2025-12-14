@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
+//Wrappers for OpenGL programs and shaders
 typedef struct
 {
   unsigned int id;

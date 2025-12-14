@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <glad/glad.h>
 
+// Wrappers for OpenGL vertex buffer objects 
 typedef struct
 {
   unsigned int id;

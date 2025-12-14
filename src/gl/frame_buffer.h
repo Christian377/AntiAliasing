@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "error.h"
 
+// Wrappers for OpenGL textures and frame buffer objects
 typedef struct
 {
   unsigned int id;
