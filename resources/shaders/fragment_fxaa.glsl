@@ -4,14 +4,13 @@ in vec2 frag_uv;
 out vec4 FragColor;
 
 uniform sampler2D screenTexture;
-uniform vec2 resolution; // window width and height in pixels
+uniform vec2 resolution; 
 
 // FXAA settings
 #define FXAA_REDUCE_MIN   (1.0/128.0)
 #define FXAA_REDUCE_MUL   (1.0/8.0)
 #define FXAA_SPAN_MAX     8.0
 
-// NEW: Add the Threshold setting (same as iterative)
 #define FXAA_EDGE_THRESHOLD 0.125
 #define FXAA_EDGE_THRESHOLD_MIN 0.0625
 
@@ -21,11 +20,11 @@ void main()
     //Center pixel
     vec3 rgbM = texture(screenTexture, frag_uv).rgb;
 
-    // Sample the luminance of neighboring pixels
-    float lumaTL = dot(texture(screenTexture, frag_uv + vec2(-texel.x, -texel.y)).rgb, vec3(0.299, 0.587, 0.114));
-    float lumaTR = dot(texture(screenTexture, frag_uv + vec2(texel.x, -texel.y)).rgb, vec3(0.299, 0.587, 0.114));
-    float lumaBL = dot(texture(screenTexture, frag_uv + vec2(-texel.x, texel.y)).rgb, vec3(0.299, 0.587, 0.114));
-    float lumaBR = dot(texture(screenTexture, frag_uv + vec2(texel.x, texel.y)).rgb, vec3(0.299, 0.587, 0.114));
+    //Sample the luminance of neighboring pixels
+    float lumaTL = dot(textureOffset(screenTexture, frag_uv, ivec2(-1,-1)).rgb, vec3(0.299, 0.587, 0.114));
+    float lumaTR = dot(textureOffset(screenTexture, frag_uv, ivec2( 1,-1)).rgb, vec3(0.299, 0.587, 0.114));
+    float lumaBL = dot(textureOffset(screenTexture, frag_uv, ivec2(-1, 1)).rgb, vec3(0.299, 0.587, 0.114));
+    float lumaBR = dot(textureOffset(screenTexture, frag_uv, ivec2( 1, 1)).rgb, vec3(0.299, 0.587, 0.114));
     float lumaM  = dot(rgbM, vec3(0.299, 0.587, 0.114));
 
     // Compute local contrast
