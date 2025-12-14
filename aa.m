@@ -11,7 +11,8 @@ if status ~= 0
     error('CMake failed:\n%s', out);
 end
 cd('bin')
-[status, out] = system('aa');
+%[status, out] = system('aa');
+[status, out] = system('aa --auto');
 
 % Clear workspace and command window
 clc;

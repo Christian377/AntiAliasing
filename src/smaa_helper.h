@@ -19,7 +19,7 @@ typedef struct
 
 
 ///@brief Initializes a specific SMAA pipeline (e.g. Low, Ultra)
-///* @param pipeline Pointer to the struct to initialize
+///@param pipeline Pointer to the struct to initialize
 ///@param preset_macro The specific define string (e.g. "#define SMAA_PRESET_ULTRA 1\n")
 ///@param lib_src Content of SMAA.hlsl
 ///@param vs_edge_src Content of vertex_edge_smaa.glsl

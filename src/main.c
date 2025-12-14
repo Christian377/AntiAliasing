@@ -35,6 +35,7 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 /// @brief The number of samples to try to capture
 uint32_t AA_SAMPLE_COUNT = 100;
 
+// Anti Aliasing Options
 typedef enum
 {
   AA_NONE,
@@ -58,12 +59,10 @@ typedef struct
   ImGuiContext* const imgui_context;
   /// @brief The ImGUI IO of `imgui_context` (never null)
   ImGuiIO* const imgui_io;
-
   /// @brief The window's width
   int window_width;
   /// @brief The window's height
   int window_height;
-
   /// @brief The frame count
   uint64_t frame_count;
   /// @brief The delta time between frames (in seconds)
@@ -131,97 +130,165 @@ typedef struct
   uint64_t samples_total;
   uint64_t samples_current;
   uint32_t* samples;
+  // Automation flags
+  bool automation_mode;
+  int warmup_frames;
 } AppState;
 
-/// @brief Function called once per frame
-/// @param state The application state
+static void run_automation_logic(AppState* state)
+{
+  // Only run if automation is enabled
+  if (!state->automation_mode)
+    return;
+
+  // Wait 20 frames to let GPU stabilize
+  if (state->warmup_frames > 0)
+  {
+    state->warmup_frames--;
+    if (state->warmup_frames == 0)
+    {
+      // Start recording.
+      state->is_recording    = true;
+      state->samples_current = 0; // Reset counter
+    }
+    return;
+  }
+
+  // Check if Recording is Done
+  if (state->is_recording && state->samples_current >= state->samples_total)
+  {
+    // Stop Recording
+    state->is_recording = false;
+
+    // Save Samples
+    if (state->current_algorithm_file_name)
+    {
+      FILE* file = fopen(state->current_algorithm_file_name, "w");
+      if (file)
+      {
+        for (size_t i = 0; i < state->samples_current; i++)
+          fprintf(file, "%" PRIu32 ",", state->samples[i]);
+        fclose(file);
+        printf("Saved: %s\n", state->current_algorithm_file_name);
+      }
+    }
+
+    // Move to Next Algorithm
+    state->anti_aliasing++;
+
+    // Reset for the new algorithm
+    state->warmup_frames = 100;
+
+    // Check if we went past the last algorithm
+    if (state->anti_aliasing > AA_SMAA_ULTRA)
+    {
+      printf("All algorithms finished. Closing.\n");
+      glfwSetWindowShouldClose(state->window, true);
+    }
+  }
+}
+
+// Function called once per frame
 static void on_frame(AppState* state)
 {
+  run_automation_logic(state);
+  if (glfwWindowShouldClose(state->window))
+    return;
+  // Ensure ImGui render state doesn't interfere with full-screen rendering
+  glDisable(GL_SCISSOR_TEST);
+  glDisable(GL_STENCIL_TEST);
+  glDisable(GL_DEPTH_TEST);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
+  glViewport(0, 0, state->window_width, state->window_height);
   glClearColor(
       fabsf(sinf((float)state->elapsed_time * 1.4f)),
       fabsf(sinf((float)state->elapsed_time * 1.1f)),
       fabsf(sinf((float)state->elapsed_time * 0.8f)), 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  // Setting up the control window
-  if (igBegin("Control", NULL, 0))
+  if (!state->automation_mode)
   {
-    // Algorithm selection menu
-    igTextColored((ImVec4){1.0f, 0.9f, 0.0f, 1.0f}, "Anti-Aliasing Algorithm:");
-    if (igButton("No AA", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_NONE;
-    igSameLine(0.0f, 5.0f);
-    if (igButton("MSAA_x4", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_MSAAx4;
-    igSameLine(0.0f, 5.0f);
-    if (igButton("MSAA_x8", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_MSAAx8;
-    igSameLine(0.0f, 5.0f);
-    if (igButton("MSAA_x16", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_MSAAx16;
-    igSameLine(0.0f, 5.0f);
-    if (igButton("FXAA", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_FXAA;
-    // New line 
-    if (igButton("FXAA_iter", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_FXAA_ITERATIVE;
-    igSameLine(0.0f, 5.0f);
-    if (igButton("SMAA_LOW", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_SMAA_LOW;
-    igSameLine(0.0f, 5.0f);
-    if (igButton("SMAA_MEDIUM", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_SMAA_MEDIUM;
-    igSameLine(0.0f, 5.0f);
-    if (igButton("SMAA_HIGH", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_SMAA_HIGH;
-    igSameLine(0.0f, 5.0f);
-    if (igButton("SMAA_ULTRA", (ImVec2){0, 0}))
-      state->anti_aliasing = AA_SMAA_ULTRA;
-
-    igSeparator();
-    // Tracing menu
-    igTextColored((ImVec4){1.0f, 0.9f, 0.0f, 1.0f}, "Tracing:");
-
-    igBeginDisabled(state->is_recording);
-    if (igInputInt("Number of Samples", &AA_SAMPLE_COUNT, 10, 100, 0))
+    // Setting up the control window (only in manual mode)
+    if (igBegin("Control", NULL, 0))
     {
-      if (AA_SAMPLE_COUNT > 10000)
-        AA_SAMPLE_COUNT = 10000;
-      if (AA_SAMPLE_COUNT < 10)
-        AA_SAMPLE_COUNT = 10;
-      state->samples_total = AA_SAMPLE_COUNT;
-      state->samples = realloc(state->samples, AA_SAMPLE_COUNT * sizeof(uint32_t));
-      state->samples_current = 0;
-    }
-    igEndDisabled();
+      // Algorithm selection menu
+      igTextColored((ImVec4){1.0f, 0.9f, 0.0f, 1.0f}, "Anti-Aliasing Algorithm:");
+      if (igButton("No AA", (ImVec2){0, 0}))
+        state->anti_aliasing = AA_NONE;
+      igSameLine(0.0f, 5.0f);
+      if (igButton("MSAA_x4", (ImVec2){0, 0}))
+        state->anti_aliasing = AA_MSAAx4;
+      igSameLine(0.0f, 5.0f);
+      if (igButton("MSAA_x8", (ImVec2){0, 0}))
+        state->anti_aliasing = AA_MSAAx8;
+      igSameLine(0.0f, 5.0f);
+      if (igButton("MSAA_x16", (ImVec2){0, 0}))
+        state->anti_aliasing = AA_MSAAx16;
+      igSameLine(0.0f, 5.0f);
+      if (igButton("FXAA", (ImVec2){0, 0}))
+        state->anti_aliasing = AA_FXAA;
+      // New line
+      if (igButton("FXAA_iter", (ImVec2){0, 0}))
+        state->anti_aliasing = AA_FXAA_ITERATIVE;
+      igSameLine(0.0f, 5.0f);
+      if (igButton("SMAA_LOW", (ImVec2){0, 0}))
+        state->anti_aliasing = AA_SMAA_LOW;
+      igSameLine(0.0f, 5.0f);
+      if (igButton("SMAA_MEDIUM", (ImVec2){0, 0}))
+        state->anti_aliasing = AA_SMAA_MEDIUM;
+      igSameLine(0.0f, 5.0f);
+      if (igButton("SMAA_HIGH", (ImVec2){0, 0}))
+        state->anti_aliasing = AA_SMAA_HIGH;
+      igSameLine(0.0f, 5.0f);
+      if (igButton("SMAA_ULTRA", (ImVec2){0, 0}))
+        state->anti_aliasing = AA_SMAA_ULTRA;
 
-    if (igButton("Record Samples", (ImVec2){0, 0}))
-    {
-      state->samples_current = 0;
-      state->is_recording    = true;
-    }
-    igSameLine(0.0f, 5.0f);
-    igBeginDisabled(state->samples_current != state->samples_total);
-    if (igButton("Save Samples", (ImVec2){0, 0}))
-    {
-      FILE* file = fopen(state->current_algorithm_file_name, "w");
-      if (file == NULL)
+      igSeparator();
+      // Tracing menu
+      igTextColored((ImVec4){1.0f, 0.9f, 0.0f, 1.0f}, "Tracing:");
+
+      igBeginDisabled(state->is_recording);
+      if (igInputInt("Number of Samples", &AA_SAMPLE_COUNT, 10, 100, 0))
       {
-        printf(
-            "Error: Could not create file `%s`!",
-            state->current_algorithm_file_name);
+        if (AA_SAMPLE_COUNT > 10000)
+          AA_SAMPLE_COUNT = 10000;
+        if (AA_SAMPLE_COUNT < 10)
+          AA_SAMPLE_COUNT = 10;
+        state->samples_total = AA_SAMPLE_COUNT;
+        state->samples = realloc(state->samples, AA_SAMPLE_COUNT * sizeof(uint32_t));
+        state->samples_current = 0;
       }
-      else
+      igEndDisabled();
+
+      if (igButton("Record Samples", (ImVec2){0, 0}))
       {
-        for (size_t i = 0; i < state->samples_current; i++)
-          fprintf(file, "%" PRIu32 ",", state->samples[i]);
-        fclose(file);
+        state->samples_current = 0;
+        state->is_recording    = true;
       }
-      state->samples_current = 0;
+      igSameLine(0.0f, 5.0f);
+      igBeginDisabled(state->samples_current != state->samples_total);
+      if (igButton("Save Samples", (ImVec2){0, 0}))
+      {
+        FILE* file = fopen(state->current_algorithm_file_name, "w");
+        if (file == NULL)
+        {
+          printf(
+              "Error: Could not create file `%s`!",
+              state->current_algorithm_file_name);
+        }
+        else
+        {
+          for (size_t i = 0; i < state->samples_current; i++)
+            fprintf(file, "%" PRIu32 ",", state->samples[i]);
+          fclose(file);
+        }
+        state->samples_current = 0;
+      }
+      igEndDisabled();
     }
-    igEndDisabled();
+    igEnd();
   }
-  igEnd();
 
   if (state->anti_aliasing == AA_NONE)
   {
@@ -308,7 +375,6 @@ static void on_frame(AppState* state)
     glDrawArrays(GL_TRIANGLES, 0, 3);
 
     aa_frame_buffer_bind(&state->default_fbo);
-    glClear(GL_COLOR_BUFFER_BIT);
     aa_program_use(&state->fxaa_program);
     aa_vertex_array_bind(&state->fullscreen_vao);
 
@@ -329,13 +395,6 @@ static void on_frame(AppState* state)
 
   if (state->anti_aliasing == AA_FXAA_ITERATIVE)
   {
-    glDisable(GL_SCISSOR_TEST);
-    glDisable(GL_STENCIL_TEST);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_BLEND);
-    glViewport(0, 0, state->window_width, state->window_height);
-
     aa_time_query_begin(&state->query);
 
     aa_frame_buffer_bind(&state->fxaa_fbo);
@@ -364,7 +423,7 @@ static void on_frame(AppState* state)
     state->current_algorithm_file_name = "aa_FXAA_Iterative.txt";
   }
 
-  // Check if current mode is ANY of the SMAA modes
+  // Check if current mode is any of the SMAA modes
   if (state->anti_aliasing >= AA_SMAA_LOW && state->anti_aliasing <= AA_SMAA_ULTRA)
   {
     aa_smaa_pipeline* smaa_pipeline = NULL;
@@ -394,23 +453,13 @@ static void on_frame(AppState* state)
 
     if (smaa_pipeline)
     {
-      glDisable(GL_SCISSOR_TEST);
-      glDisable(GL_STENCIL_TEST);
-      glDisable(GL_DEPTH_TEST);
-      glDisable(GL_CULL_FACE);
-      glDisable(GL_BLEND);
-      glViewport(0, 0, state->window_width, state->window_height);
-
       aa_time_query_begin(&state->query);
-
-      // Initial Render (Scene to FBO)
       aa_frame_buffer_bind(&state->smaa_fbo);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       aa_program_use(&state->program);
       aa_vertex_array_bind(&state->vao);
       aa_vertex_buffer_bind(&state->vbo);
       glDrawArrays(GL_TRIANGLES, 0, 3);
-
       glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
       // Metrics required by SMAA.hlsl
@@ -482,10 +531,12 @@ static void on_frame(AppState* state)
   {
     state->samples[state->samples_current++] = state->query.result;
     if (state->samples_current == state->samples_total)
-      state->is_recording = false;
+      if (!state->automation_mode)
+        state->is_recording = false;
   }
 }
 
+// Function called once at the beginning 
 static int on_init(AppState* state)
 {
   // triangle vertices position
@@ -555,6 +606,7 @@ static int on_init(AppState* state)
       FRAGMENT_BLEND_SMAA_BODY, VERTEX_NEIGHBORHOOD_SMAA_BODY,
       FRAGMENT_NEIGHBORHOOD_SMAA_BODY);
 
+  // Sampling logic
   state->samples_total   = AA_SAMPLE_COUNT;
   state->samples_current = 0;
   size_t samples_bytes   = sizeof(uint32_t) * state->samples_total;
@@ -578,16 +630,13 @@ static int on_init(AppState* state)
     free(VERTEX_FULLSCREEN_QUAD);
     free(FRAGMENT_FXAA);
     free(FRAGMENT_FXAA_ITER);
-
     free(SMAA_LIB);
-
     free(VERTEX_EDGE_SMAA_BODY);
     free(VERTEX_BLEND_SMAA_BODY);
     free(VERTEX_NEIGHBORHOOD_SMAA_BODY);
     free(FRAGMENT_EDGE_SMAA_BODY);
     free(FRAGMENT_BLEND_SMAA_BODY);
     free(FRAGMENT_NEIGHBORHOOD_SMAA_BODY);
-
     printf("Error: One or more shader files failed to load.\n");
     return -1;
   }
@@ -602,7 +651,6 @@ static int on_init(AppState* state)
   // create shaders
   aa_vertex_shader_create(&state->default_vertex_shader, VERTEX_DEFAULT);
   aa_fragment_shader_create(&state->default_fragment_shader, FRAGMENT_DEFAULT);
-
   aa_vertex_shader_create(
       &state->fullscreen_quad_vertex_shader, VERTEX_FULLSCREEN_QUAD);
   aa_fragment_shader_create(&state->fxaa_fragment_shader, FRAGMENT_FXAA);
@@ -612,7 +660,6 @@ static int on_init(AppState* state)
   // compile shaders
   aa_vertex_shader_compile(&state->default_vertex_shader);
   aa_fragment_shader_compile(&state->default_fragment_shader);
-
   aa_vertex_shader_compile(&state->fullscreen_quad_vertex_shader);
   aa_fragment_shader_compile(&state->fxaa_fragment_shader);
   aa_fragment_shader_compile(&state->fxaa_iterative_fragment_shader);
@@ -669,7 +716,7 @@ static int on_init(AppState* state)
       &state->msaa_fbo_x16, &state->msaa_color_texture_x16);
   aa_frame_buffer_bind(&state->default_fbo);
 
-  //FXAA fbo and screen texture initialization
+  // FXAA fbo and screen texture initialization
   aa_frame_buffer_create(&state->fxaa_fbo);
   aa_texture_create(
       &state->fxaa_color_texture, state->window_width, state->window_height);
@@ -700,7 +747,7 @@ static int on_init(AppState* state)
 
   return 0;
 }
-
+// Function called once after exiting loop
 static void on_end(AppState* state)
 {
   // Delete Programs
@@ -752,8 +799,10 @@ static void on_end(AppState* state)
   free(state->samples);
 }
 
+// Function called when window gets resized
 static void on_resize(AppState* state)
 {
+  // Resize textures and rebind to corresponding fbos
   aa_texture_msaa_dimensions(
       &state->msaa_color_texture_x4, state->window_width, state->window_height, 4);
   aa_texture_msaa_dimensions(
@@ -781,7 +830,8 @@ static void on_resize(AppState* state)
 
 /// @brief Main loop of the application
 /// @param window The window of the application (not null)
-static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
+static void main_loop(
+    GLFWwindow* window, ImGuiContext* context, ImGuiIO* io, int argc, char** argv)
 {
   assert(window != NULL && "expected non-null window");
 
@@ -790,8 +840,23 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
   *(GLFWwindow**)(&state.window)          = window;
   *(ImGuiContext**)(&state.imgui_context) = context;
   *(ImGuiIO**)(&state.imgui_io)           = io;
-  state.anti_aliasing                     = AA_NONE;
   state.default_fbo.id                    = 0;
+
+  // Default settings
+  state.anti_aliasing                     = AA_NONE;
+  state.automation_mode                   = false;
+  state.warmup_frames                     = 0;
+
+  // Handling automation runs from matlab
+  if (argc > 1 && strcmp(argv[1], "--auto") == 0)
+  {
+    state.automation_mode = true;
+    state.warmup_frames   = 100;
+    // Nearly 8 seconds per algorithm
+    AA_SAMPLE_COUNT       = 500;     
+    printf("Running in Automation Mode (%d samples)\n", AA_SAMPLE_COUNT);
+  }
+
   ImFontAtlas* atlas                      = io->Fonts;
   io->FontDefault                         = ImFontAtlas_AddFontFromFileTTF(
       atlas, "resources/Inter-4.1/InterVariable.ttf", 18.0f, NULL, NULL);
@@ -851,13 +916,12 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
     glfwSwapBuffers(window);
     ++state.frame_count;
   }
-
   on_end(&state);
 }
 
 /// @brief Application starting point
 /// @return Exit code
-int main()
+int main(int argc, char** argv)
 {
   printf(
       "Hello AA! (GLFW %i.%i.%i)\n", GLFW_VERSION_MAJOR, GLFW_VERSION_MINOR,
@@ -901,7 +965,7 @@ int main()
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init("#version 430 core");
 
-  main_loop(window, context, io);
+  main_loop(window, context, io, argc, argv);
 
   // shutdown ImGUI
   ImGui_ImplOpenGL3_Shutdown();
