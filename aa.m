@@ -126,3 +126,69 @@ end
 
 % Prevent labels from being cut off
 ylim([0, max(plot_means) * 1.2]);
+
+%% DARTBOARD ANALYSIS 
+
+fprintf('\nProcessing Dartboard Data...\n');
+dart_means_ms = zeros(1, length(files));
+dart_files_found = false(1, length(files));
+
+for i = 1:length(files)
+    orig_name = files{i};
+    dart_filename = strrep(orig_name, '.txt', '_dartboard.txt');
+    
+    if isfile(dart_filename)
+        try
+            rawData = readmatrix(dart_filename);
+            data = rmmissing(rawData);
+            mean_val = mean(data, 'all');
+            dart_means_ms(i) = mean_val / 1000000.0; % ns to ms
+            dart_files_found(i) = true;
+            fprintf('Loaded %s: %.4f ms\n', dart_filename, dart_means_ms(i));
+        catch ME
+            warning('Error reading %s: %s', dart_filename, ME.message);
+        end
+    else
+        warning('Dartboard file not found: %s', dart_filename);
+    end
+end
+
+% Plotting Dartboard Chart
+if any(dart_files_found)
+    plot_dart_means = dart_means_ms(dart_files_found);
+    plot_dart_labels = labels(dart_files_found);
+
+    figure('Name', 'Dartboard Scene Performance', 'Color', 'w');
+    b_dart = bar(plot_dart_means);
+    
+    % Styling
+    b_dart.FaceColor = 'flat';
+    b_dart.EdgeColor = 'none';
+    
+    % Reuse the same colors as the first graph
+    current_indices = find(dart_files_found);
+    for k = 1:length(current_indices)
+        original_idx = current_indices(k);
+        b_dart.CData(k, :) = base_colors(original_idx, :);
+    end
+
+    ylabel('Frame Time (ms)');
+    title('Performance on Complex Scene (Dartboard)');
+    grid on;
+    box off;
+    
+    xticklabels(plot_dart_labels);
+    xtickangle(45);
+    
+    % Add text values
+    for i = 1:length(plot_dart_means)
+        text(i, plot_dart_means(i), sprintf('%.2f', plot_dart_means(i)), ...
+            'HorizontalAlignment', 'center', ...
+            'VerticalAlignment', 'bottom', ...
+            'FontWeight', 'bold');
+    end
+    
+    ylim([0, max(plot_dart_means) * 1.2]);
+else
+    fprintf('No Dartboard data found to plot.\n');
+end

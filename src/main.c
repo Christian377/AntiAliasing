@@ -14,7 +14,6 @@
 #include <cimgui.h>
 #include <cimgui_impl.h>
 
-#include "stb_image/stb_image.h"
 #include "gl/program.h"
 #include "gl/shaders.h"
 #include "gl/vertex_array.h"
@@ -24,6 +23,7 @@
 #include "smaa/AreaTex.h"
 #include "smaa/SearchTex.h"
 #include "smaa_helper.h"
+#include "dartboard.h"
 
 #ifdef _WIN32
 // on windows define the following symbols so that the high performance
@@ -49,6 +49,13 @@ typedef enum
   AA_SMAA_HIGH,
   AA_SMAA_ULTRA
 } aa_algorithm;
+
+// The scene to draw
+typedef enum
+{
+  SCENE_TRIANGLE,
+  SCENE_DARTBOARD
+} SceneType;
 
 /// @brief Application state, across frames
 typedef struct
@@ -133,7 +140,29 @@ typedef struct
   // Automation flags
   bool automation_mode;
   int warmup_frames;
+  /// @brief The scene to be drawn
+  SceneType current_scene;
+  /// @brief The dartboard scene data
+  DartboardScene dartboard;
 } AppState;
+
+// Function handling draw calls, based on current scene to render
+static void render_current_scene(AppState* state)
+{
+  // Both scenes use the default program
+  aa_program_use(&state->program);
+
+  if (state->current_scene == SCENE_TRIANGLE)
+  {
+    aa_vertex_array_bind(&state->vao);
+    aa_vertex_buffer_bind(&state->vbo);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+  }
+  else if (state->current_scene == SCENE_DARTBOARD)
+  {
+    dartboard_render(&state->dartboard);
+  }
+}
 
 static void run_automation_logic(AppState* state)
 {
@@ -182,8 +211,18 @@ static void run_automation_logic(AppState* state)
     // Check if we went past the last algorithm
     if (state->anti_aliasing > AA_SMAA_ULTRA)
     {
-      printf("All algorithms finished. Closing.\n");
-      glfwSetWindowShouldClose(state->window, true);
+      if (state->current_scene == SCENE_TRIANGLE)
+      {
+        printf("Triangle finished. Switching to Dartboard.\n");
+        state->current_scene = SCENE_DARTBOARD;
+        state->anti_aliasing = AA_NONE; 
+        state->warmup_frames = 100;     
+      }
+      else
+      {
+        printf("All algorithms and scenes finished. Closing.\n");
+        glfwSetWindowShouldClose(state->window, true);
+      }
     }
   }
 }
@@ -243,11 +282,17 @@ static void on_frame(AppState* state)
       igSameLine(0.0f, 5.0f);
       if (igButton("SMAA_ULTRA", (ImVec2){0, 0}))
         state->anti_aliasing = AA_SMAA_ULTRA;
-
+      //Scene Menu
       igSeparator();
-      // Tracing menu
+      igTextColored((ImVec4){1.0f, 0.9f, 0.0f, 1.0f}, "Scene Selection:");
+      if (igButton("Triangle", (ImVec2){0, 0}))
+        state->current_scene = SCENE_TRIANGLE;
+      igSameLine(0.0f, 5.0f);
+      if (igButton("Dartboard", (ImVec2){0, 0}))
+        state->current_scene = SCENE_DARTBOARD;
+      igSeparator();
+      // Tracing Menu
       igTextColored((ImVec4){1.0f, 0.9f, 0.0f, 1.0f}, "Tracing:");
-
       igBeginDisabled(state->is_recording);
       if (igInputInt("Number of Samples", &AA_SAMPLE_COUNT, 10, 100, 0))
       {
@@ -293,33 +338,29 @@ static void on_frame(AppState* state)
   if (state->anti_aliasing == AA_NONE)
   {
     aa_time_query_begin(&state->query);
-    aa_program_use(&state->program);
-    aa_vertex_array_bind(&state->vao);
-    aa_vertex_buffer_bind(&state->vbo);
-
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    render_current_scene(state);
     aa_time_query_end(&state->query);
-    state->current_algorithm_file_name = "aa_NONE.txt";
+    state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
+                                             ? "aa_NONE.txt"
+                                             : "aa_NONE_dartboard.txt";
   }
 
   if (state->anti_aliasing == AA_MSAAx4)
   {
     aa_time_query_begin(&state->query);
     aa_frame_buffer_bind(&state->msaa_fbo_x4);
-
     glClear(GL_COLOR_BUFFER_BIT);
-    aa_program_use(&state->program);
-    aa_vertex_array_bind(&state->vao);
-    aa_vertex_buffer_bind(&state->vbo);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
+    render_current_scene(state);
+    // Blitting MSAA fbo to default fbo to render on screen
     aa_frame_buffer_blit(
         &state->default_fbo, &state->msaa_fbo_x4, state->window_width,
         state->window_height);
     aa_frame_buffer_bind(&state->default_fbo);
     aa_time_query_end(&state->query);
 
-    state->current_algorithm_file_name = "aa_MSAAx4.txt";
+    state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
+                                             ? "aa_MSAAx4.txt"
+                                             : "aa_MSAAx4_dartboard.txt";
   }
 
   if (state->anti_aliasing == AA_MSAAx8)
@@ -328,11 +369,7 @@ static void on_frame(AppState* state)
     // Bind MSAA framebuffer
     aa_frame_buffer_bind(&state->msaa_fbo_x8);
     glClear(GL_COLOR_BUFFER_BIT);
-    aa_program_use(&state->program);
-    aa_vertex_array_bind(&state->vao);
-    aa_vertex_buffer_bind(&state->vbo);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
+    render_current_scene(state);
     // Blit MSAA FBO to default framebuffer
     aa_frame_buffer_blit(
         &state->default_fbo, &state->msaa_fbo_x8, state->window_width,
@@ -340,27 +377,27 @@ static void on_frame(AppState* state)
     aa_frame_buffer_bind(&state->default_fbo);
     aa_time_query_end(&state->query);
 
-    state->current_algorithm_file_name = "aa_MSAAx8.txt";
+    state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
+                                            ? "aa_MSAAx8.txt"
+                                            : "aa_MSAAx8_dartboard.txt";
   }
 
   if (state->anti_aliasing == AA_MSAAx16)
   {
     aa_time_query_begin(&state->query);
     aa_frame_buffer_bind(&state->msaa_fbo_x16);
-
     glClear(GL_COLOR_BUFFER_BIT);
-    aa_program_use(&state->program);
-    aa_vertex_array_bind(&state->vao);
-    aa_vertex_buffer_bind(&state->vbo);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
+    render_current_scene(state);
+    // Blit MSAA FBO to default framebuffer
     aa_frame_buffer_blit(
         &state->default_fbo, &state->msaa_fbo_x16, state->window_width,
         state->window_height);
     aa_frame_buffer_bind(&state->default_fbo);
     aa_time_query_end(&state->query);
 
-    state->current_algorithm_file_name = "aa_MSAAx16.txt";
+    state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
+                                             ? "aa_MSAAx16.txt"
+                                             : "aa_MSAAx16_dartboard.txt";
   }
 
   if (state->anti_aliasing == AA_FXAA)
@@ -369,16 +406,12 @@ static void on_frame(AppState* state)
     // Bind FXAA framebuffer
     aa_frame_buffer_bind(&state->fxaa_fbo);
     glClear(GL_COLOR_BUFFER_BIT);
-    aa_program_use(&state->program);
-    aa_vertex_array_bind(&state->vao);
-    aa_vertex_buffer_bind(&state->vbo);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
+    render_current_scene(state);
+    // Post processing effects
     aa_frame_buffer_bind(&state->default_fbo);
     aa_program_use(&state->fxaa_program);
     aa_vertex_array_bind(&state->fullscreen_vao);
-
-    //don't need to rebind vbo
+    // Don't need to rebind vbo
     glCall(glActiveTexture(GL_TEXTURE0));
     aa_texture_bind(&state->fxaa_color_texture);
 
@@ -386,27 +419,23 @@ static void on_frame(AppState* state)
     glUniform2f(
         glGetUniformLocation(state->fxaa_program.id, "resolution"),
         state->window_width, state->window_height);
-
     glDrawArrays(GL_TRIANGLES, 0, 6);
     aa_time_query_end(&state->query);
 
-    state->current_algorithm_file_name = "aa_FXAA.txt";
+    state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
+                                             ? "aa_FXAA.txt"
+                                             : "aa_FXAA_dartboard.txt";
   }
 
   if (state->anti_aliasing == AA_FXAA_ITERATIVE)
   {
     aa_time_query_begin(&state->query);
-
     aa_frame_buffer_bind(&state->fxaa_fbo);
     glClear(GL_COLOR_BUFFER_BIT);
-    aa_program_use(&state->program);
-    aa_vertex_array_bind(&state->vao);
-    aa_vertex_buffer_bind(&state->vbo);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
+    render_current_scene(state);   
+    // Post processing effects
     aa_frame_buffer_bind(&state->default_fbo);
     aa_program_use(&state->fxaa_iterative_program);
-
     aa_vertex_array_bind(&state->fullscreen_vao);
     glActiveTexture(GL_TEXTURE0);
     aa_texture_bind(&state->fxaa_color_texture);
@@ -420,7 +449,9 @@ static void on_frame(AppState* state)
     glDrawArrays(GL_TRIANGLES, 0, 6);
     aa_time_query_end(&state->query);
 
-    state->current_algorithm_file_name = "aa_FXAA_Iterative.txt";
+    state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
+                                             ? "aa_FXAA_Iterative.txt"
+                                             : "aa_FXAA_Iterative_dartboard.txt";
   }
 
   // Check if current mode is any of the SMAA modes
@@ -432,20 +463,24 @@ static void on_frame(AppState* state)
     switch (state->anti_aliasing)
     {
     case AA_SMAA_LOW:
-      smaa_pipeline                      = &state->smaa_low;
-      state->current_algorithm_file_name = "aa_SMAA_Low.txt";
+      smaa_pipeline = &state->smaa_low;
+      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE) 
+                                           ? "aa_SMAA_Low.txt" : "aa_SMAA_Low_dartboard.txt";
       break;
     case AA_SMAA_MEDIUM:
-      smaa_pipeline                      = &state->smaa_medium;
-      state->current_algorithm_file_name = "aa_SMAA_Medium.txt";
+      smaa_pipeline = &state->smaa_medium;
+      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE) 
+                                           ? "aa_SMAA_Medium.txt" : "aa_SMAA_Medium_dartboard.txt";
       break;
     case AA_SMAA_HIGH:
-      smaa_pipeline                      = &state->smaa_high;
-      state->current_algorithm_file_name = "aa_SMAA_High.txt";
+      smaa_pipeline = &state->smaa_high;
+      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE) 
+                                           ? "aa_SMAA_High.txt" : "aa_SMAA_High_dartboard.txt";
       break;
     case AA_SMAA_ULTRA:
-      smaa_pipeline                      = &state->smaa_ultra;
-      state->current_algorithm_file_name = "aa_SMAA_Ultra.txt";
+      smaa_pipeline = &state->smaa_ultra;
+      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE) 
+                                           ? "aa_SMAA_Ultra.txt" : "aa_SMAA_Ultra_dartboard.txt";
       break;
     default:
       break;
@@ -456,10 +491,7 @@ static void on_frame(AppState* state)
       aa_time_query_begin(&state->query);
       aa_frame_buffer_bind(&state->smaa_fbo);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-      aa_program_use(&state->program);
-      aa_vertex_array_bind(&state->vao);
-      aa_vertex_buffer_bind(&state->vbo);
-      glDrawArrays(GL_TRIANGLES, 0, 3);
+      render_current_scene(state);
       glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
       // Metrics required by SMAA.hlsl
@@ -745,6 +777,12 @@ static int on_init(AppState* state)
   free(FRAGMENT_FXAA);
   free(FRAGMENT_FXAA_ITER);
 
+  if (dartboard_init(&state->dartboard) != 0)
+  {
+    printf("Error initializing dartboard\n");
+    return -1;
+  }
+
   return 0;
 }
 // Function called once after exiting loop
@@ -797,6 +835,8 @@ static void on_end(AppState* state)
   // Delete Query
   aa_time_query_delete(&state->query);
   free(state->samples);
+
+  dartboard_cleanup(&state->dartboard);
 }
 
 // Function called when window gets resized
@@ -846,6 +886,7 @@ static void main_loop(
   state.anti_aliasing                     = AA_NONE;
   state.automation_mode                   = false;
   state.warmup_frames                     = 0;
+  state.current_scene                     = SCENE_TRIANGLE;
 
   // Handling automation runs from matlab
   if (argc > 1 && strcmp(argv[1], "--auto") == 0)
