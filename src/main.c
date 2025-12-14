@@ -30,9 +30,6 @@
 // GPU is used (not the integrated one).
 __declspec(dllexport) uint32_t NvOptimusEnablement             = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-  #define GLFW_EXPOSE_NATIVE_WIN32
-  #include <GLFW/glfw3native.h>
-  #include <windows.h>
 #endif
 
 /// @brief The number of samples to try to capture
@@ -165,7 +162,7 @@ static void on_frame(AppState* state)
     igSameLine(0.0f, 5.0f);
     if (igButton("FXAA", (ImVec2){0, 0}))
       state->anti_aliasing = AA_FXAA;
-    igSameLine(0.0f, 5.0f);
+    // New line 
     if (igButton("FXAA_iter", (ImVec2){0, 0}))
       state->anti_aliasing = AA_FXAA_ITERATIVE;
     igSameLine(0.0f, 5.0f);
@@ -650,8 +647,6 @@ static int on_init(AppState* state)
   aa_vertex_array_create(&state->fullscreen_vao);
   aa_vertex_array_position_uv_attribute(&state->fullscreen_vao);
 
-  glfwGetFramebufferSize(state->window, &state->window_width, &state->window_height);
-
   // MSAA multisampling fbo and texture initialization
   aa_frame_buffer_create(&state->msaa_fbo_x4);
   aa_frame_buffer_create(&state->msaa_fbo_x8);
@@ -800,6 +795,12 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
   ImFontAtlas* atlas                      = io->Fonts;
   io->FontDefault                         = ImFontAtlas_AddFontFromFileTTF(
       atlas, "resources/Inter-4.1/InterVariable.ttf", 18.0f, NULL, NULL);
+  glfwGetFramebufferSize(state.window, &state.window_width, &state.window_height);
+  if (state.window_height < 32)
+    state.window_height = 32;
+  if (state.window_width < 32)
+    state.window_width = 32;
+
   // ^^^ state setup
   if (on_init(&state) != 0)
     return;
@@ -816,7 +817,11 @@ static void main_loop(GLFWwindow* window, ImGuiContext* context, ImGuiIO* io)
     // resize viewport only on changes
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
-
+    // Set minimum fbo size to avoid 0 size
+    if (height < 32)
+      height = 32;
+    if (width < 32)
+      width = 32;
     if (width != state.window_width || height != state.window_height)
     {
       state.window_width  = width;
@@ -876,17 +881,6 @@ int main()
     exit(-1);
   }
   glfwMakeContextCurrent(window);
-// Disabling window minimize, which could interfere with the sampling process
-#ifdef _WIN32
-  // Get the raw Windows handle
-  HWND hwnd = glfwGetWin32Window(window);
-  // Get current style
-  LONG style = GetWindowLong(hwnd, GWL_STYLE);
-  // Remove the Minimize Box from the style
-  style &= ~WS_MINIMIZEBOX;
-  // Apply the new style
-  SetWindowLong(hwnd, GWL_STYLE, style);
-#endif
 
   // initialize glad
   if (gladLoadGLLoader((GLADloadproc)&glfwGetProcAddress) == 0)
