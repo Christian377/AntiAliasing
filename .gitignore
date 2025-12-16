@@ -1,2 +1,4 @@
 .build/
 bin/
+results/performance_dartboard.png
+results/performance_triangle.png
