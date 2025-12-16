@@ -20,6 +20,10 @@ The C program generates raw performance logs (comma-separated values of frame ti
 * `aa_FXAA*.txt`: Post-processing FXAA results.
 * `aa_SMAA_*.txt`: Multi-pass SMAA results.
 
+The MATLAB script processes the raw logs and generates mean value bar charts comparing the algorithms in the results folder (`results/`).
+* `performance_triangle.png`: Frame time comparison for the simple scene.
+* `performance_dartboard.png`: Frame time comparison for the complex scene.
+
 These files are intermediate data processed by the MATLAB script to generate the final visualizations.
 
 ## Report
