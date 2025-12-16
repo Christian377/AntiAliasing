@@ -28,17 +28,17 @@ The final report is located in the **`docs/`** directory as `report.pdf`. This d
 ## Running the program
 
 ### Dependencies
-* **Operating System**: Windows (Tested) or Linux (SIE VDI compatible).
+* **Operating System**: Tested on Windows, Linux compatible 
 * **Build System**: CMake (Version 3.10+).
-* **Compiler**: GCC, Clang, or MSVC supporting C11.
+* **Compiler**: Any recent C/C++ compiler.
 * **Languages**: C, GLSL, MATLAB (for analysis).
-* **External Libraries (Included via Submodules)**:
+* **External Libraries**:
     * **GLFW** (Windowing & Input)
     * **GLAD** (OpenGL Loader)
     * **cimgui / Dear ImGui** (User Interface)
 
-### Option A: Automated Benchmark (Recommended)
-The project includes a MATLAB script (`aa.m`) that handles the **entire pipeline**: it automatically creates the build directory, compiles the C code via CMake, runs the benchmark mode, and plots the results.
+### Option A: Automated Benchmark
+The project includes a MATLAB script (`aa.m`) that handles the entire pipeline: it automatically creates the build directory, compiles the C code via CMake, runs the benchmark mode, and plots the results.
 
 1.  Open MATLAB.
 2.  Run the script in the terminal:
