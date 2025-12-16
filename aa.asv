@@ -139,9 +139,8 @@ end
 % Prevent labels from being cut off
 ylim([0, max(plot_means) * 1.2]);
 
-% Create results folder if non existing
-mkdir('../results');
 % Save to results folder
+mkdir('results');
 saveas(fig1, '../results/performance_triangle.png');
 
 %% DARTBOARD ANALYSIS 
