@@ -2,7 +2,11 @@
 #define __HG_AA_GL_VERTEX_ARRAY
 
 #include <glad/glad.h>
+
 // Wrappers for OpenGl vertex arrays
+// Manages the state required to supply vertex data to the pipeline,
+// including binding buffers and defining vertex attribute layouts.
+
 typedef struct
 {
   unsigned int id;

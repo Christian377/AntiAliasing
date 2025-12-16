@@ -1,3 +1,4 @@
+// Basic fragment shader that outputs a solid white color
 #version 430 core
 out vec4 FragColor;
 void main()

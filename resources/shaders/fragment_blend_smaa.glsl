@@ -1,3 +1,6 @@
+// SMAA Blend Weight Calculation Pass Fragment Shader 
+// Uses the edges detected in Pass 1 to calculate blending weights for pixels
+// by searching the Area and Search textures
 in vec2 vTexCoord;
 in vec2 vPixCoord;
 in vec4 vOffset[3];

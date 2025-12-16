@@ -5,7 +5,7 @@
 #include "gl/vertex_array.h"
 #include "gl/vertex_buffer.h"
 
-// Define a struct to hold dartboard specific data
+// Struct to hold dartboard specific data
 typedef struct
 {
   aa_vertex_array vao;
@@ -19,7 +19,7 @@ int dartboard_init(DartboardScene* scene);
 // Render the dartboard (binds VAO and draws)
 void dartboard_render(DartboardScene* scene);
 
-// Cleanup resources
+// Deletes dartboard specific data
 void dartboard_cleanup(DartboardScene* scene);
 
 #endif

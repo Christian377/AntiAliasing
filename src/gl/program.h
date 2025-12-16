@@ -5,7 +5,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
-//Wrappers for OpenGL programs and shaders
+// Wrappers for OpenGL programs and shaders
+// Handles the allocation and data upload of vertex data (positions, colors, UVs)
+// to the GPU memory
+
 typedef struct
 {
   unsigned int id;

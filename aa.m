@@ -1,25 +1,36 @@
+% Automates the build and execution of the C rendering engine, 
+% then imports and visualizes the resulting frame-time data.
+% This script handles the full pipeline: CMake build -> Execution -> Visualization.
 system("COMMAND LINE TO EXECUTE")
 oldDir = pwd;
 mkdir('.build');
 cd('.build');
 
-[status, out] = system('cmake ..');
-
-cd(oldDir);
-
+[status, out] = system('cmake -DCMAKE_BUILD_TYPE=Release ..');
 if status ~= 0
     error('CMake failed:\n%s', out);
 end
+
+[status, out] = system('cmake --build . --parallel');
+if status ~= 0
+    error('CMake build failed:\n%s', out);
+end
+
+cd(oldDir);
+
 cd('bin')
-%[status, out] = system('aa');
+
 [status, out] = system('aa --auto');
 
 % Clear workspace and command window
 clc;
 clear;
 close all;
+% --- End of Command Line Logic / Start of Data Analysis ---
+% The C application has finished running and should have exported .txt files.
+% The following section loads these files and generates comparison plots.
 
-% List of filenames exactly as defined in your C code
+%% TRIANGLE ANALYSIS
 files = { ...
     'aa_NONE.txt', ...
     'aa_MSAAx4.txt', 'aa_MSAAx8.txt', 'aa_MSAAx16.txt', ...

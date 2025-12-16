@@ -35,7 +35,7 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 /// @brief The number of samples to try to capture
 uint32_t AA_SAMPLE_COUNT = 100;
 
-// Anti Aliasing Options
+/// @brief Anti Aliasing Options
 typedef enum
 {
   AA_NONE,
@@ -50,7 +50,7 @@ typedef enum
   AA_SMAA_ULTRA
 } aa_algorithm;
 
-// The scene to draw
+/// @brief The scene to draw
 typedef enum
 {
   SCENE_TRIANGLE,
@@ -60,49 +60,49 @@ typedef enum
 /// @brief Application state, across frames
 typedef struct
 {
-  /// @brief The window (never null)
+  // The window (never null)
   GLFWwindow* const window;
-  /// @brief The ImGUI context (never null)
+  // The ImGUI context (never null)
   ImGuiContext* const imgui_context;
-  /// @brief The ImGUI IO of `imgui_context` (never null)
+  // The ImGUI IO of `imgui_context` (never null)
   ImGuiIO* const imgui_io;
-  /// @brief The window's width
+  // The window's width
   int window_width;
-  /// @brief The window's height
+  // The window's height
   int window_height;
-  /// @brief The frame count
+  // The frame count
   uint64_t frame_count;
-  /// @brief The delta time between frames (in seconds)
+  // The delta time between frames (in seconds)
   double delta_time;
-  /// @brief The time passed from first frame until present
+  // The time passed from first frame until present
   double elapsed_time;
-  /// @brief The currently used anti aliasing algorithm
+  // The currently used anti aliasing algorithm
   aa_algorithm anti_aliasing;
-  /// @brief The time query responsible for measuring algorithms performance
+  // The time query responsible for measuring algorithms performance
   aa_time_query query;
-  /// @brief The vertex array object for position only vertices
+  // The vertex array object for position only vertices
   aa_vertex_array vao;
-  /// @brief The position only vertex buffer object
+  // The position only vertex buffer object
   aa_vertex_buffer vbo;
-  /// @brief The veryex array object for position and uv attributes vertices
+  // The veryex array object for position and uv attributes vertices
   aa_vertex_array fullscreen_vao;
-  /// @brief The position and uv attributes vertex buffer object
+  // The position and uv attributes vertex buffer object
   aa_vertex_buffer fullscreen_vbo;
-  /// @brief Program used to draw the scene without any specific additional effect
+  // Program used to draw the scene without any specific additional effect
   aa_program program;
-  /// @brief Program used to apply FXAA
+  // Program used to apply FXAA
   aa_program fxaa_program;
-  /// @brief Program used to apply FXAA
+  // Program used to apply FXAA
   aa_program fxaa_iterative_program;
-  /// @brief Vertex shader which takes as input position only vertices
+  // Vertex shader which takes as input position only vertices
   aa_fragment_shader default_fragment_shader;
-  /// @brief Fragment shader which simply draws vertex shader outputs without any additional effect
+  // Fragment shader which simply draws vertex shader outputs without any additional effect
   aa_vertex_shader default_vertex_shader;
-  /// @brief Fragment shader containing FXAA post processing algorithm
+  // Fragment shader containing FXAA post processing algorithm
   aa_fragment_shader fxaa_fragment_shader;
-  /// @brief Fragment shader containing FXAA post processing algorithm
+  // Fragment shader containing FXAA post processing algorithm
   aa_fragment_shader fxaa_iterative_fragment_shader;
-  /// @brief Vertex shader used to render a texture on the screen
+  // Vertex shader used to render a texture on the screen
   aa_vertex_shader fullscreen_quad_vertex_shader;
   // SMAA Pipelines (Programs + Shaders bundled)
   aa_smaa_pipeline smaa_low;
@@ -140,13 +140,13 @@ typedef struct
   // Automation flags
   bool automation_mode;
   int warmup_frames;
-  /// @brief The scene to be drawn
+  // The scene to be drawn
   SceneType current_scene;
-  /// @brief The dartboard scene data
+  // The dartboard scene data
   DartboardScene dartboard;
 } AppState;
 
-// Function handling draw calls, based on current scene to render
+/// @brief Function handling draw calls, based on current scene to render
 static void render_current_scene(AppState* state)
 {
   // Both scenes use the default program
@@ -164,6 +164,7 @@ static void render_current_scene(AppState* state)
   }
 }
 
+/// @brief In case running in automation mode, takes care of all the sampling logic for every algorithm and scene, then closes application
 static void run_automation_logic(AppState* state)
 {
   // Only run if automation is enabled
@@ -215,8 +216,8 @@ static void run_automation_logic(AppState* state)
       {
         printf("Triangle finished. Switching to Dartboard.\n");
         state->current_scene = SCENE_DARTBOARD;
-        state->anti_aliasing = AA_NONE; 
-        state->warmup_frames = 100;     
+        state->anti_aliasing = AA_NONE;
+        state->warmup_frames = 100;
       }
       else
       {
@@ -227,7 +228,13 @@ static void run_automation_logic(AppState* state)
   }
 }
 
-// Function called once per frame
+/// @brief Executes the rendering logic for a single frame
+/// @details This function orchestrates the entire frame pipeline:
+///          - Runs automation logic (only if enabled)
+///          - Renders the ImGui control interface (in manual mode)
+///          - Executes the selected Anti-Aliasing pipeline
+///          - Measures GPU execution time using time queries
+///          - Records samples
 static void on_frame(AppState* state)
 {
   run_automation_logic(state);
@@ -248,7 +255,7 @@ static void on_frame(AppState* state)
 
   if (!state->automation_mode)
   {
-    // Setting up the control window (only in manual mode)
+    // Setting up the UI control window (only in manual mode)
     if (igBegin("Control", NULL, 0))
     {
       // Algorithm selection menu
@@ -335,6 +342,7 @@ static void on_frame(AppState* state)
     igEnd();
   }
 
+  // Rendering Pipelines (Varying depending on chosen AA algorithm)
   if (state->anti_aliasing == AA_NONE)
   {
     aa_time_query_begin(&state->query);
@@ -378,8 +386,8 @@ static void on_frame(AppState* state)
     aa_time_query_end(&state->query);
 
     state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
-                                            ? "aa_MSAAx8.txt"
-                                            : "aa_MSAAx8_dartboard.txt";
+                                             ? "aa_MSAAx8.txt"
+                                             : "aa_MSAAx8_dartboard.txt";
   }
 
   if (state->anti_aliasing == AA_MSAAx16)
@@ -432,7 +440,7 @@ static void on_frame(AppState* state)
     aa_time_query_begin(&state->query);
     aa_frame_buffer_bind(&state->fxaa_fbo);
     glClear(GL_COLOR_BUFFER_BIT);
-    render_current_scene(state);   
+    render_current_scene(state);
     // Post processing effects
     aa_frame_buffer_bind(&state->default_fbo);
     aa_program_use(&state->fxaa_iterative_program);
@@ -459,28 +467,32 @@ static void on_frame(AppState* state)
   {
     aa_smaa_pipeline* smaa_pipeline = NULL;
 
-    // Select the correct pipeline struct and log filename
+    // Select the correct SMAA pipeline struct and log filename
     switch (state->anti_aliasing)
     {
     case AA_SMAA_LOW:
-      smaa_pipeline = &state->smaa_low;
-      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE) 
-                                           ? "aa_SMAA_Low.txt" : "aa_SMAA_Low_dartboard.txt";
+      smaa_pipeline                      = &state->smaa_low;
+      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
+                                               ? "aa_SMAA_Low.txt"
+                                               : "aa_SMAA_Low_dartboard.txt";
       break;
     case AA_SMAA_MEDIUM:
-      smaa_pipeline = &state->smaa_medium;
-      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE) 
-                                           ? "aa_SMAA_Medium.txt" : "aa_SMAA_Medium_dartboard.txt";
+      smaa_pipeline                      = &state->smaa_medium;
+      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
+                                               ? "aa_SMAA_Medium.txt"
+                                               : "aa_SMAA_Medium_dartboard.txt";
       break;
     case AA_SMAA_HIGH:
-      smaa_pipeline = &state->smaa_high;
-      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE) 
-                                           ? "aa_SMAA_High.txt" : "aa_SMAA_High_dartboard.txt";
+      smaa_pipeline                      = &state->smaa_high;
+      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
+                                               ? "aa_SMAA_High.txt"
+                                               : "aa_SMAA_High_dartboard.txt";
       break;
     case AA_SMAA_ULTRA:
-      smaa_pipeline = &state->smaa_ultra;
-      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE) 
-                                           ? "aa_SMAA_Ultra.txt" : "aa_SMAA_Ultra_dartboard.txt";
+      smaa_pipeline                      = &state->smaa_ultra;
+      state->current_algorithm_file_name = (state->current_scene == SCENE_TRIANGLE)
+                                               ? "aa_SMAA_Ultra.txt"
+                                               : "aa_SMAA_Ultra_dartboard.txt";
       break;
     default:
       break;
@@ -501,7 +513,7 @@ static void on_frame(AppState* state)
 
       // Edge Detection Pass
       aa_frame_buffer_bind(&state->smaa_edge_fbo);
-      glClear(GL_COLOR_BUFFER_BIT); 
+      glClear(GL_COLOR_BUFFER_BIT);
       aa_program_use(&smaa_pipeline->edge_program);
       aa_vertex_array_bind(&state->fullscreen_vao);
       glActiveTexture(GL_TEXTURE0);
@@ -524,8 +536,8 @@ static void on_frame(AppState* state)
       glActiveTexture(GL_TEXTURE2);
       aa_texture_bind(&state->smaa_search_texture);
       glUniform4fv(
-          glGetUniformLocation(smaa_pipeline->blend_program.id, "SMAA_RT_METRICS"), 1,
-          metrics);
+          glGetUniformLocation(smaa_pipeline->blend_program.id, "SMAA_RT_METRICS"),
+          1, metrics);
       glUniform1i(
           glGetUniformLocation(smaa_pipeline->blend_program.id, "edgeTex"), 0);
       glUniform1i(
@@ -543,8 +555,9 @@ static void on_frame(AppState* state)
       glActiveTexture(GL_TEXTURE1);
       aa_texture_bind(&state->smaa_blend_texture);
       glUniform4fv(
-          glGetUniformLocation(smaa_pipeline->neighborhood_program.id, "SMAA_RT_METRICS"), 1,
-          metrics);
+          glGetUniformLocation(
+              smaa_pipeline->neighborhood_program.id, "SMAA_RT_METRICS"),
+          1, metrics);
       glUniform1i(
           glGetUniformLocation(smaa_pipeline->neighborhood_program.id, "sceneTex"),
           0);
@@ -556,9 +569,9 @@ static void on_frame(AppState* state)
       aa_time_query_end(&state->query);
     }
   }
-
+  // Getting time elapsed between start and end of every frame's rendering pipeline
   aa_time_query_result(&state->query);
-  // write in buffer
+  // Write in buffer
   if (state->samples_current < state->samples_total && state->is_recording)
   {
     state->samples[state->samples_current++] = state->query.result;
@@ -568,7 +581,15 @@ static void on_frame(AppState* state)
   }
 }
 
-// Function called once at the beginning 
+/// @brief Initializes the application state, OpenGL resources, and scene data
+/// @details This function is responsible for:
+///          - Compiling and linking all shader programs
+///          - Initializing the SMAA pipeline with pre-computed textures
+///          - Creating Vertex Array Objects (VAOs) and Vertex Buffer Objects (VBOs)
+///          - Setting up Framebuffer Objects (FBOs) and backing textures for off-screen rendering
+///          - Initializing the specific scene geometry
+/// @param state The application state structure to be populated
+/// @return 0 on success, -1 if any shader compilation or resource allocation fails
 static int on_init(AppState* state)
 {
   // triangle vertices position
@@ -672,7 +693,7 @@ static int on_init(AppState* state)
     printf("Error: One or more shader files failed to load.\n");
     return -1;
   }
-
+  // Create time query
   aa_time_query_create(&state->query);
 
   // create programs
@@ -785,7 +806,8 @@ static int on_init(AppState* state)
 
   return 0;
 }
-// Function called once after exiting loop
+
+/// @brief cleans up all allocated resources before application exit.
 static void on_end(AppState* state)
 {
   // Delete Programs
@@ -836,10 +858,11 @@ static void on_end(AppState* state)
   aa_time_query_delete(&state->query);
   free(state->samples);
 
+  // Delete Dartboard Scene Specific Data
   dartboard_cleanup(&state->dartboard);
 }
 
-// Function called when window gets resized
+/// @brief Function called when window gets resized
 static void on_resize(AppState* state)
 {
   // Resize textures and rebind to corresponding fbos
@@ -869,7 +892,11 @@ static void on_resize(AppState* state)
 }
 
 /// @brief Main loop of the application
-/// @param window The window of the application (not null)
+/// @param window Pointer to the active GLFW window (not null)
+/// @param context Pointer to the ImGui context
+/// @param io Pointer to the ImGui IO interface
+/// @param argc Command line argument count
+/// @param argv Command line argument values
 static void main_loop(
     GLFWwindow* window, ImGuiContext* context, ImGuiIO* io, int argc, char** argv)
 {
@@ -883,10 +910,10 @@ static void main_loop(
   state.default_fbo.id                    = 0;
 
   // Default settings
-  state.anti_aliasing                     = AA_NONE;
-  state.automation_mode                   = false;
-  state.warmup_frames                     = 0;
-  state.current_scene                     = SCENE_TRIANGLE;
+  state.anti_aliasing   = AA_NONE;
+  state.automation_mode = false;
+  state.warmup_frames   = 0;
+  state.current_scene   = SCENE_TRIANGLE;
 
   // Handling automation runs from matlab
   if (argc > 1 && strcmp(argv[1], "--auto") == 0)
@@ -894,20 +921,19 @@ static void main_loop(
     state.automation_mode = true;
     state.warmup_frames   = 100;
     // Nearly 8 seconds per algorithm
-    AA_SAMPLE_COUNT       = 500;     
+    AA_SAMPLE_COUNT = 500;
     printf("Running in Automation Mode (%d samples)\n", AA_SAMPLE_COUNT);
   }
 
-  ImFontAtlas* atlas                      = io->Fonts;
-  io->FontDefault                         = ImFontAtlas_AddFontFromFileTTF(
+  ImFontAtlas* atlas = io->Fonts;
+  io->FontDefault    = ImFontAtlas_AddFontFromFileTTF(
       atlas, "resources/Inter-4.1/InterVariable.ttf", 18.0f, NULL, NULL);
   glfwGetFramebufferSize(state.window, &state.window_width, &state.window_height);
   if (state.window_height < 32)
     state.window_height = 32;
   if (state.window_width < 32)
     state.window_width = 32;
-
-  // ^^^ state setup
+  // Make sure all required data will be initialized successfully
   if (on_init(&state) != 0)
     return;
 
@@ -940,9 +966,7 @@ static void main_loop(
     ImGui_ImplGlfw_NewFrame();
     igNewFrame();
     // BEGIN FRAME:
-
     on_frame(&state);
-
     // END FRAME:
     igRender();
     ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());
@@ -961,6 +985,8 @@ static void main_loop(
 }
 
 /// @brief Application starting point
+/// @param argc Number of command-line arguments
+/// @param argv Array of command-line argument strings
 /// @return Exit code
 int main(int argc, char** argv)
 {
@@ -968,7 +994,7 @@ int main(int argc, char** argv)
       "Hello AA! (GLFW %i.%i.%i)\n", GLFW_VERSION_MAJOR, GLFW_VERSION_MINOR,
       GLFW_VERSION_REVISION);
 
-  // initialize GLFW
+  // Initialize GLFW
   if (glfwInit() != GLFW_TRUE)
   {
     fputs("ERROR: Could not initialize GLFW!", stderr);
@@ -977,7 +1003,7 @@ int main(int argc, char** argv)
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
-  // create window, and OpenGL context
+  // Create window, and OpenGL context
   GLFWwindow* window = glfwCreateWindow(640, 480, "aa - benchmarker", NULL, NULL);
   if (window == NULL)
   {
@@ -987,17 +1013,17 @@ int main(int argc, char** argv)
   }
   glfwMakeContextCurrent(window);
 
-  // initialize glad
+  // Initialize glad
   if (gladLoadGLLoader((GLADloadproc)&glfwGetProcAddress) == 0)
   {
     fputs("ERROR: Could not initialize GLAD!", stderr);
     exit(-1);
   }
 
-  // disable VSYNC
+  // Disable VSYNC
   glfwSwapInterval(0);
 
-  // start ImGUI
+  // Start ImGUI
   ImGuiContext* context = igCreateContext(NULL);
   ImGuiIO* io           = igGetIO_ContextPtr(context);
   io->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -1008,13 +1034,13 @@ int main(int argc, char** argv)
 
   main_loop(window, context, io, argc, argv);
 
-  // shutdown ImGUI
+  // Shutdown ImGUI
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   igDestroyContext(NULL);
 
-  // destroy window
+  // Destroy window
   glfwDestroyWindow(window);
-  // shutdown GLFW
+  // Shutdown GLFW
   glfwTerminate();
 }

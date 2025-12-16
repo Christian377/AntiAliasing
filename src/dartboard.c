@@ -7,16 +7,14 @@
   #define M_PI 3.14159265358979323846
 #endif
 
-// In dartboard.c
-
 int dartboard_init(DartboardScene* scene)
 {
-  // 180 slices total, we only draw half of them (90 spokes)
+  // 180 slices total, we only draw half of them
   int total_slices    = 180;
   int spokes          = total_slices / 2;
   scene->vertex_count = spokes * 3;
 
-  // Position only (3 floats per vertex)
+  // Position only
   size_t buffer_size = scene->vertex_count * 3 * sizeof(float);
   float* vertices    = (float*)malloc(buffer_size);
 
@@ -44,7 +42,6 @@ int dartboard_init(DartboardScene* scene)
     vertices[idx++] = 0.0f;
   }
 
-
   // Create and fill the VBO
   aa_vertex_buffer_create(&scene->vbo);
   aa_vertex_buffer_update(&scene->vbo, vertices, buffer_size);
@@ -52,13 +49,12 @@ int dartboard_init(DartboardScene* scene)
   // Create the VAO
   aa_vertex_array_create(&scene->vao);
 
-  // 3Bind the VAO so we can configure it
+  // Bind the VAO so we can configure it
   aa_vertex_array_bind(&scene->vao);
 
   // Bind the VBO while the VAO is bound (Crucial Step!)
   aa_vertex_buffer_bind(&scene->vbo);
 
-  // layout location = 0
   aa_vertex_array_position_attribute(&scene->vao);
 
   free(vertices);

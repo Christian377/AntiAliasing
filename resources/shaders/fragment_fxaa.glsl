@@ -1,3 +1,11 @@
+/*
+ * Implements a simplified "Console" version of FXAA
+ * Performs single-pass edge detection using local luminance contrast
+ * Calculates a blend direction based on the 3x3 neighborhood to blur jaggies
+ * This version omits the iterative sub-pixel search loop found in PC FXAA (3.11),
+ * offering higher performance at the cost of slightly lower edge reconstruction quality.
+ */
+
 #version 430 core
 
 in vec2 frag_uv;

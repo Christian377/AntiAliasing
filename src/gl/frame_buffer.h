@@ -6,6 +6,9 @@
 #include "error.h"
 
 // Wrappers for OpenGL textures and frame buffer objects
+// Handles creation, resizing, and binding of standard 2D textures,
+// multisampled textures (MSAA), and framebuffer attachments for off-screen rendering
+
 typedef struct
 {
   unsigned int id;

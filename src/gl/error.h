@@ -9,12 +9,12 @@
 #include <stdbool.h>
 
 /// @brief Wraps an OpenGL function call to verify that no error was produced
-#define glCall(x)                                       \
-  do                                                    \
-  {                                                     \
-    x;                                                  \
+#define glCall(x)                                                 \
+  do                                                              \
+  {                                                               \
+    x;                                                            \
     if (!aa_consume_log_errors(#x, __func__, __FILE__, __LINE__)) \
-      abort();                                          \
+      abort();                                                    \
   } while (0)
 
 /// @brief Consumes the current OpenGL errors, and logs errors.

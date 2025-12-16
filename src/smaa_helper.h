@@ -6,6 +6,9 @@
 #include "gl/program.h"
 #include "gl/shaders.h"
 
+// Container for the complete SMAA rendering pipeline
+// Bundles the three distinct shader programs (Edge Detection, Blend Weight, Neighborhood Blending)
+// and their constituent shaders required to execute a full SMAA pass
 typedef struct
 {
   aa_program edge_program;
@@ -16,7 +19,6 @@ typedef struct
   aa_vertex_shader edge_vs, blend_vs, neigh_vs;
   aa_fragment_shader edge_fs, blend_fs, neigh_fs;
 } aa_smaa_pipeline;
-
 
 ///@brief Initializes a specific SMAA pipeline (e.g. Low, Ultra)
 ///@param pipeline Pointer to the struct to initialize

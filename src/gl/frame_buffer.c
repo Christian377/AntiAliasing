@@ -96,7 +96,8 @@ void aa_texture_dimensions(aa_texture* out, size_t width, size_t height)
 {
   glCall(glBindTexture(out->target, out->id));
   glCall(glTexImage2D(
-      GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL));
+      GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+      NULL));
 }
 
 void aa_frame_buffer_create(aa_frame_buffer* out)

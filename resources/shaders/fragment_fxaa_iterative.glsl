@@ -1,3 +1,10 @@
+/*
+ * Implements the "Quality" (PC) version of FXAA 3.11.
+ * Unlike the simplified console version, this implementation features:
+ * - An iterative sub-pixel search loop (up to 12 steps) to find the exact end of an edge
+ * - Sub-pixel shifting to resolve aliasing on textures, not just geometry edges
+ * Reference: Ported from Timothy Lottes' (NVIDIA) FXAA 3.11 Quality FxaaPixelShader.
+ */
 #version 430 core
 
 in vec2 frag_uv;
