@@ -26,6 +26,7 @@ cd('bin')
 clc;
 clear;
 close all;
+
 % --- End of Command Line Logic / Start of Data Analysis ---
 % The C application has finished running and should have exported .txt files.
 % The following section loads these files and generates comparison plots.
