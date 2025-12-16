@@ -56,7 +56,7 @@ If you wish to visually inspect the anti-aliasing quality or performance in real
 
 **1. Build via CMake:**
 ```bash
-git clone --recursive [https://github.com/Christian377/AntiAliasing.git](https://github.com/Christian377/AntiAliasing.git)
+git clone --recursive https://github.com/Christian377/AntiAliasing.git
 cd AntiAliasing
 mkdir .build
 cd .build
