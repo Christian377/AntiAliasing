@@ -86,7 +86,7 @@ if isempty(plot_means)
 end
 
 % Plotting Bar Chart
-figure('Name', 'AA Performance Analysis', 'Color', 'w');
+fig1 = figure('Name', 'AA Performance Analysis', 'Color', 'w');
 
 % Create the bar chart
 b = bar(plot_means);
@@ -127,7 +127,7 @@ box off;
 xticklabels(plot_labels);
 xtickangle(45); % Tilt text for better readability
 
-% 4. Add text values on top of bars
+% Add text values on top of bars
 for i = 1:length(plot_means)
     text(i, plot_means(i), sprintf('%.2f', plot_means(i)), ...
         'HorizontalAlignment', 'center', ...
@@ -137,6 +137,9 @@ end
 
 % Prevent labels from being cut off
 ylim([0, max(plot_means) * 1.2]);
+
+% Save to results folder
+saveas(fig1, '../results/performance_triangle.png');
 
 %% DARTBOARD ANALYSIS 
 
@@ -169,7 +172,7 @@ if any(dart_files_found)
     plot_dart_means = dart_means_ms(dart_files_found);
     plot_dart_labels = labels(dart_files_found);
 
-    figure('Name', 'Dartboard Scene Performance', 'Color', 'w');
+    fig2 = figure('Name', 'Dartboard Scene Performance', 'Color', 'w');
     b_dart = bar(plot_dart_means);
     
     % Styling
@@ -200,6 +203,7 @@ if any(dart_files_found)
     end
     
     ylim([0, max(plot_dart_means) * 1.2]);
+    saveas(fig2, '../results/performance_dartboard.png');
 else
     fprintf('No Dartboard data found to plot.\n');
 end
