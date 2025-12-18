@@ -44,12 +44,13 @@ The final report is located in the **`docs/`** directory as `report.pdf`. This d
 ### Option A: Automated Benchmark
 The project includes a MATLAB script (`aa.m`) that handles the entire pipeline: it automatically creates the build directory, compiles the C code via CMake, runs the benchmark mode, and plots the results.
 
-1.  Open MATLAB.
-2.  Run the script in the terminal:
-    ```matlab
-    matlab -batch aa
-    ```
-    *(This will compile the project and save the resulting graphs.)*
+Run the script in the terminal:
+ ```
+ git clone --recursive https://github.com/Christian377/AntiAliasing.git
+ cd AntiAliasing
+ matlab -batch aa
+ ```
+ *(This will compile the project and save the resulting graphs.)*
 
 ### Option B: Manual UI Mode
 If you wish to visually inspect the anti-aliasing quality or performance in real-time, you can build and run the C engine manually. This launches a window with an ImGui overlay.
