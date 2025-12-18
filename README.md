@@ -1,7 +1,7 @@
 # Comparative Analysis of Anti-Aliasing Algorithms
 
 ## Project Description
-This project empirically evaluates and compares the performance and visual quality of three industry-standard anti-aliasing algorithms: Multi-Sampling Anti-Aliasing (MSAA), Fast Approximate Anti-Aliasing (FXAA), and Subpixel Morphological Anti-Aliasing (SMAA). The program renders two test scenes (a simple Triangle and a complex Dartboard) using a custom C/OpenGL engine, measuring GPU frame times for each algorithm to quantify trade-offs between visual fidelity and computational cost in Forward Rendering pipelines.
+This project empirically evaluates and compares the performance and visual quality of three industry-standard anti-aliasing algorithms: Multi-Sampling Anti-Aliasing (MSAA), Fast Approximate Anti-Aliasing (FXAA), and Subpixel Morphological Anti-Aliasing (SMAA). The program renders two test scenes (a triangle and more complex dartboard) using a custom C/OpenGL engine, measuring GPU frame times for each algorithm to quantify trade-offs between visual fidelity and computational cost in Forward Rendering pipelines.
 
 ## Input files
 * **Shader Source Code (`resources/shaders/`)**: Contains the GLSL source code for all rendering passes:
@@ -24,11 +24,8 @@ The MATLAB script processes the raw logs and generates mean value bar charts com
 * `performance_triangle.png`: Frame time comparison for the simple scene.
 * `performance_dartboard.png`: Frame time comparison for the complex scene.
 
-These files are intermediate data processed by the MATLAB script to generate the final visualizations.
-
 ## Report
-The final report is located in the **`docs/`** directory as `report.pdf`. This directory also contains the templates used for the report structure.
-
+The final report is located in the **`docs/`** directory as `report.pdf`.
 ## Running the program
 
 ### Dependencies
@@ -73,11 +70,11 @@ Run the executable located in the `bin` folder:
 
 **3. Controls:**
 * **Anti-Aliasing Algorithm:** Click the buttons (e.g., "MSAA x4", "FXAA", "SMAA_ULTRA") to switch algorithms instantly.
-* **Scene Selection:** Toggle between "Triangle" (Simple) and "Dartboard" (Complex) to see how different geometry affects edge detection.
+* **Scene Selection:** Toggle between "Triangle" and "Dartboard" to see how different geometry affects edge detection.
 * **Tracing:** You can manually trigger a sample recording session from this UI if desired.
 
 ## Contributors
-* **Christian Abboud** - Core Engine, Shader Implementation, Automation Logic.
+* **Christian Abboud** - Core Engine, Shader Implementation, Automation.
 
 ## Acknowledgments
 
