@@ -128,4 +128,5 @@ typedef struct
   // The dartboard scene data
   DartboardScene dartboard;
 } AppState;
+
 #endif // !__AA_HG_APPSTATE
