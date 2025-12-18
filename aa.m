@@ -1,7 +1,15 @@
 % Automates the build and execution of the C rendering engine, 
 % then imports and visualizes the resulting frame-time data.
 % This script handles the full pipeline: CMake build -> Execution -> Visualization.
-system("COMMAND LINE TO EXECUTE")
+
+mfilePath = mfilename('fullpath');
+if contains(mfilePath,'LiveEditorEvaluationHelper')
+    mfilePath = matlab.desktop.editor.getActiveFilename;
+end
+
+mfolderpath = fileparts(mfilePath)
+cd(mfolderpath)
+
 oldDir = pwd;
 mkdir('.build');
 cd('.build');
