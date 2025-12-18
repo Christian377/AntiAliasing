@@ -229,7 +229,7 @@ static void on_frame(AppState* state)
     glUniform1i(glGetUniformLocation(state->fxaa_program.id, "screenTexture"), 0);
     glUniform2f(
         glGetUniformLocation(state->fxaa_program.id, "resolution"),
-        state->window_width, state->window_height);
+        (float)state->window_width, (float)state->window_height);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     aa_time_query_end(&state->query);
 
@@ -255,7 +255,7 @@ static void on_frame(AppState* state)
         glGetUniformLocation(state->fxaa_iterative_program.id, "screenTexture"), 0);
     glUniform2f(
         glGetUniformLocation(state->fxaa_iterative_program.id, "resolution"),
-        state->window_width, state->window_height);
+        (float)state->window_width, (float)state->window_height);
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
     aa_time_query_end(&state->query);
